@@ -6,6 +6,7 @@
 
 import { formatDate as sharedFormatDate, formatPaceSwim } from '../../shared/utils/index.js';
 import { renderWeatherAnalysis, renderWeatherMapDetails } from '../../shared/utils/weather-analysis.js';
+import { loadAppMode, isLocalMode } from '../../services/mode.js';
 
 // =====================================================
 // 1. INITIALIZATION & CONFIGURATION
@@ -62,7 +63,9 @@ const DOM = {
 
 // Parse activity ID from URL
 const params = new URLSearchParams(window.location.search);
-const activityId = parseInt(params.get('id'), 10);
+// Kept as a string (not parseInt'd): local-mode activity ids are filename-derived slugs,
+// not always numeric, and this value is only ever used in template literals / API query params.
+const activityId = params.get('id');
 
 // Chart instances registry for cleanup
 const chartInstances = {};
@@ -965,7 +968,10 @@ function renderStreamCharts(streams, activity) {
  */
 async function loadActivityPage() {
     try {
-        const authPayload = getAuthPayload();
+        // Local mode has no login/tokens at all — the local-* endpoints don't need one,
+        // see LOCAL_GPX_MIGRATION_PLAN.md §6.
+        await loadAppMode();
+        const authPayload = isLocalMode() ? 'local' : getAuthPayload();
         if (!authPayload || !activityId) {
             throw new Error('Missing authentication or activity ID');
         }

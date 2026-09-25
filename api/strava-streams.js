@@ -1,4 +1,5 @@
 import { getValidAccessToken } from './_shared.js';
+import { readActivityStreams } from './_local/store.js';
 
 export default async function handler(req, res) {
     if (req.method !== 'GET') {
@@ -6,7 +7,25 @@ export default async function handler(req, res) {
     }
 
     const { id, type } = req.query;
-    if (!id || !type) {
+    if (!id) {
+        return res.status(400).json({ error: 'Activity ID is required' });
+    }
+
+    // Local mode: see the matching comment in strava-activity.js.
+    if (process.env.APP_MODE === 'local') {
+        try {
+            const streams = await readActivityStreams(id);
+            if (!streams) {
+                return res.status(404).json({ error: 'Activity not found' });
+            }
+            return res.status(200).json({ streams });
+        } catch (error) {
+            console.error('Error in /api/strava-streams (local mode):', error);
+            return res.status(500).json({ error: error.message });
+        }
+    }
+
+    if (!type) {
         return res.status(400).json({ error: 'Activity ID and stream types are required' });
     }
 

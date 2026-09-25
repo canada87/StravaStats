@@ -1,0 +1,8 @@
+node_modules
+.git
+local-data
+test_gpx
+.env
+.env.*
+!.env.example
+.vercel

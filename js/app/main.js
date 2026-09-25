@@ -25,13 +25,16 @@ import {
     setCachedGears,
     getCachedActivities,
     saveCachedActivities,
+    importGpxFiles,
 } from '../services/index.js';
 import { preprocessActivities } from '../shared/preprocessing/index.js';
 import { isDemoMode } from '../demo/index.js';
+import { loadAppMode, isLocalMode } from '../services/mode.js';
 
 const CACHE_VERSION = 'v2-efficiency-moving-ratio';
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    await loadAppMode();
     // --- STATE ---
     let allActivities = [];
     let dateFilterFrom = null;
@@ -67,6 +70,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const demoButton = document.getElementById('demo-button');
     const logoutButton = document.getElementById('logout-button');
     const refreshButton = document.getElementById('refresh-button');
+    const importGpxButton = document.getElementById('import-gpx-button');
+    const importGpxInput = document.getElementById('import-gpx-input');
+    const loginButtonsRow = document.getElementById('login-buttons-row');
 
     // Run Tab
     const applyFilterButton = document.getElementById('apply-date-filter');
@@ -664,6 +670,32 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 
+    // --- LOCAL MODE: GPX IMPORT ---
+    async function importGpxFileList(fileList) {
+        const files = Array.from(fileList || []);
+        if (files.length === 0) return;
+
+        showLoading(`Importing ${files.length} GPX file(s)...`, 20);
+        try {
+            const result = await importGpxFiles(files);
+            const parts = [];
+            if (result.imported?.length) parts.push(`${result.imported.length} imported`);
+            if (result.duplicates?.length) parts.push(`${result.duplicates.length} already present`);
+            if (result.errors?.length) parts.push(`${result.errors.length} failed`);
+            showLoading(parts.join(', ') || 'Import completed', 90);
+
+            if (result.errors?.length) {
+                console.warn('[local-import] Errors:', result.errors);
+            }
+
+            await refreshActivities();
+        } catch (error) {
+            handleError('GPX import failed', error);
+        } finally {
+            hideLoading();
+        }
+    }
+
     // --- EVENT LISTENERS ---
     if (loginButton) loginButton.addEventListener('click', redirectToStrava);
     if (demoButton) demoButton.addEventListener('click', () => {
@@ -671,6 +703,13 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     if (logoutButton) logoutButton.addEventListener('click', logout);
     if (refreshButton) refreshButton.addEventListener('click', refreshActivities);
+    if (importGpxButton && importGpxInput) {
+        importGpxButton.addEventListener('click', () => importGpxInput.click());
+        importGpxInput.addEventListener('change', () => {
+            importGpxFileList(importGpxInput.files);
+            importGpxInput.value = '';
+        });
+    }
     // Ko-fi integration removed
 
     // --- SERVICE WORKER REGISTRATION (PWA) ---
@@ -818,8 +857,24 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- APP ENTRY POINT ---
-    handleAuth(initializeApp).catch(error => {
-        console.error('App failed to start:', error);
-        hideLoading();
-    });
+    if (isLocalMode()) {
+        // No Strava/demo login in local mode: activities come from imported GPX files only.
+        if (loginButtonsRow) loginButtonsRow.classList.add('hidden');
+        if (importGpxButton) importGpxButton.classList.remove('hidden');
+
+        const localTokens = {
+            access_token: 'local',
+            refresh_token: 'local',
+            expires_at: Math.floor(Date.now() / 1000) + 86400,
+        };
+        initializeApp(localTokens).catch(error => {
+            console.error('App failed to start:', error);
+            hideLoading();
+        });
+    } else {
+        handleAuth(initializeApp).catch(error => {
+            console.error('App failed to start:', error);
+            hideLoading();
+        });
+    }
 });

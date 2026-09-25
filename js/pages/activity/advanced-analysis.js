@@ -3,8 +3,8 @@
  * Bridges new analysis engine with activity page UI
  */
 
-import { analyzeActivity } from '../analysis/index.js';
-import { GPXExporter, CSVExporter, JSONExporter } from '../analysis/export/index.js';
+import { analyzeActivity } from '../../analysis/index.js';
+import { GPXExporter, CSVExporter, JSONExporter } from '../../analysis/export/index.js';
 
 export class AdvancedActivityAnalyzer {
     constructor(activity_id) {

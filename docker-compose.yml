@@ -1,0 +1,12 @@
+services:
+  app:
+    build: .
+    ports:
+      - "3001:3001"
+    environment:
+      - APP_MODE=local
+      - DATA_DIR=/data
+      - HOST=0.0.0.0
+    volumes:
+      - ./local-data:/data          # dati persistenti (attività importate + gear.json)
+      - ./test_gpx:/import-seed:ro  # dataset di test, sola lettura

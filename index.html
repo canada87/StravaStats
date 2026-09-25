@@ -165,7 +165,7 @@
             <img src="./icon-sport.svg" alt="StravaStats" style="width:56px;height:56px;margin-bottom:0.5rem;">
             <h1>StravaStats</h1>
             <p>Connect your Strava account to visualize your progress and discover new insights.</p>
-            <div style="display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.5rem;">
+            <div id="login-buttons-row" style="display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.5rem;">
                 <button id="login-button" aria-label="Connect with Strava" style="flex: 1; min-width: 200px;">Connect
                     with Strava</button>
                 <button id="demo-button" aria-label="Try demo with 250 sample activities"
@@ -223,6 +223,17 @@
                         Coach<span class="tab-wip-badge">SOON</span></button>
                 </nav>
                 <nav class="top-bar__actions">
+                    <button id="import-gpx-button" class="action-btn hidden" aria-label="Import GPX activities"
+                        title="Import GPX activities">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                            <polyline points="17 8 12 3 7 8" />
+                            <line x1="12" y1="3" x2="12" y2="15" />
+                        </svg>
+                    </button>
+                    <input type="file" id="import-gpx-input" accept=".gpx" multiple class="hidden"
+                        aria-hidden="true">
                     <button id="settings-button" class="action-btn" aria-label="Open settings" title="Settings">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

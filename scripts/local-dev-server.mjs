@@ -15,6 +15,9 @@ const rootDir = path.resolve(__dirname, '..');
 const apiDir = path.join(rootDir, 'api');
 const originalEnvKeys = new Set(Object.keys(process.env));
 const port = Number(process.env.PORT || 3001);
+// Bind to 127.0.0.1 by default (matches previous behavior). Docker needs 0.0.0.0 so the
+// published port can reach the process inside the container — set HOST=0.0.0.0 there.
+const host = process.env.HOST || '127.0.0.1';
 
 const mimeTypes = new Map([
   ['.html', 'text/html; charset=utf-8'],
@@ -82,6 +85,13 @@ async function parseBody(req) {
   if (buffer.length === 0) return undefined;
 
   const contentType = req.headers['content-type'] || '';
+
+  // multipart/form-data (file uploads) is binary-unsafe to decode as utf8 text up front;
+  // hand the raw buffer to the API route and let it parse parts using the content-type boundary.
+  if (contentType.includes('multipart/form-data')) {
+    return buffer;
+  }
+
   const bodyText = buffer.toString('utf8');
 
   if (contentType.includes('application/json')) {
@@ -232,6 +242,6 @@ const server = createServer(async (req, res) => {
   await serveFile(res, resolveStaticPath(url));
 });
 
-server.listen(port, '127.0.0.1', () => {
-  console.log(`Local dev server ready at http://127.0.0.1:${port}`);
+server.listen(port, host, () => {
+  console.log(`Local dev server ready at http://${host}:${port}`);
 });

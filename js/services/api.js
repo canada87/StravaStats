@@ -4,6 +4,8 @@
 // CACHE CONFIGURATION
 // ===================================================================
 import { isDemoMode, getDemoActivities, getDemoGears } from '../demo/index.js';
+import { isLocalMode } from './mode.js';
+import * as localApi from './local-api.js';
 const CACHE_DURATIONS = {
     athlete: 24 * 60 * 60 * 1000,      // 24 hours
     zones: 24 * 60 * 60 * 1000,        // 24 hours
@@ -87,6 +89,10 @@ async function handleApiResponse(response) {
 }
 
 export async function fetchAllActivities() {
+    if (isLocalMode()) {
+        return localApi.fetchAllActivities();
+    }
+
     // If in demo mode, return demo data
     if (isDemoMode()) {
         return getDemoActivities();
@@ -137,6 +143,10 @@ export function renderAthleteProfile(athlete) {
 }
 
 export async function fetchAthleteData() {
+    if (isLocalMode()) {
+        return localApi.fetchAthleteData();
+    }
+
     // Check cache first with 24h TTL
     const cacheKey = 'strava_athlete_data';
     const cached = getFromCache(cacheKey, 'athlete');
@@ -176,6 +186,10 @@ export async function fetchAthleteData() {
 }
 
 export async function fetchTrainingZones() {
+    if (isLocalMode()) {
+        return localApi.fetchTrainingZones();
+    }
+
     // Check cache first with 24h TTL
     const cacheKey = 'strava_training_zones';
     const cached = getFromCache(cacheKey, 'zones');
@@ -202,6 +216,10 @@ export async function fetchTrainingZones() {
 }
 
 export async function fetchAllGears(athlete) {
+    if (isLocalMode()) {
+        return localApi.fetchAllGears();
+    }
+
     if (isDemoMode()) {
         return getDemoGears(athlete);
     }
@@ -236,4 +254,8 @@ export function getCachedGears() {
 export function setCachedGears(gearsList) {
     // Save gears array to cache with 24h TTL
     saveToCache('strava_gears', gearsList);
+}
+
+export async function importGpxFiles(files) {
+    return localApi.importGpxFiles(files);
 }

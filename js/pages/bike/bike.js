@@ -6,7 +6,6 @@
 
 import { formatDate as sharedFormatDate, formatSpeedBike } from '../../shared/utils/index.js';
 import { renderWeatherAnalysis, renderWeatherMapDetails } from '../../shared/utils/weather-analysis.js';
-import { loadAppMode, isLocalMode } from '../../services/mode.js';
 
 // =====================================================
 // 1. CONFIGURATION
@@ -371,38 +370,25 @@ function populateDynamicChartData(streams, isOriginal = false) {
 }
 
 // =====================================================
-// 4. AUTH & API FUNCTIONS
+// 4. API FUNCTIONS
 // =====================================================
 
-function getAuthPayload() {
-    const tokenString = localStorage.getItem('strava_tokens');
-    if (!tokenString) return null;
-    return btoa(tokenString);
-}
-
-async function fetchFromApi(url, authPayload) {
-    const response = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${authPayload}` }
-    });
+async function fetchFromApi(url) {
+    const response = await fetch(url);
     if (!response.ok) {
         const errorText = await response.text();
         throw new Error(`API Error ${response.status}: ${errorText}`);
     }
-    const result = await response.json();
-    if (result.tokens) {
-        localStorage.setItem('strava_tokens', JSON.stringify(result.tokens));
-    }
-    return result;
+    return response.json();
 }
 
-async function fetchActivityDetails(id, authPayload) {
-    const result = await fetchFromApi(`/api/strava-activity?id=${id}`, authPayload);
+async function fetchActivityDetails(id) {
+    const result = await fetchFromApi(`/api/local-activity?id=${id}`);
     return result.activity;
 }
 
-async function fetchActivityStreams(id, authPayload) {
-    const streamTypes = 'distance,time,heartrate,altitude,cadence,watts,velocity_smooth';
-    const result = await fetchFromApi(`/api/strava-streams?id=${id}&type=${streamTypes}`, authPayload);
+async function fetchActivityStreams(id) {
+    const result = await fetchFromApi(`/api/local-streams?id=${id}`);
     return result.streams;
 }
 
@@ -424,7 +410,6 @@ function renderActivityInfo(activity) {
     const kudos = Number.isFinite(kudosValue) ? kudosValue : null;
     const comments = Number.isFinite(commentsValue) ? commentsValue : null;
     const tempStr = activity.average_temp !== undefined && activity.average_temp !== null ? `${activity.average_temp}°C` : null;
-    const stravaUrl = activity.id ? `https://www.strava.com/activities/${activity.id}` : null;
     const fields = [];
     const pushField = (label, value) => {
         if (value === null || value === undefined || value === '' || value === 'N/A' || value === 'Not available' || value === '-' || value === 'null') return;
@@ -437,7 +422,6 @@ function renderActivityInfo(activity) {
     const heroGear = document.getElementById('activity-hero-gear');
     const heroKudos = document.getElementById('activity-hero-kudos');
     const heroComments = document.getElementById('activity-hero-comments');
-    const heroLink = document.getElementById('activity-hero-strava-link');
 
     if (heroDate) heroDate.textContent = date;
     if (heroDescription) heroDescription.textContent = description || 'No description provided.';
@@ -449,7 +433,6 @@ function renderActivityInfo(activity) {
     }
     if (heroKudos) heroKudos.textContent = `❤️ ${kudos !== null ? kudos : '—'}`;
     if (heroComments) heroComments.textContent = `💬 ${comments !== null ? comments : '—'}`;
-    if (heroLink && stravaUrl) heroLink.href = stravaUrl;
 }
 
 function renderActivityStats(activity, streams) {
@@ -1466,23 +1449,14 @@ async function main() {
         return;
     }
 
-    // Local mode has no login/tokens at all — the local-* endpoints don't need one,
-    // see LOCAL_GPX_MIGRATION_PLAN.md §6.
-    await loadAppMode();
-    const authPayload = isLocalMode() ? 'local' : getAuthPayload();
-    if (!authPayload) {
-        document.body.innerHTML = '<div style="padding:20px;text-align:center;"><h2>Not authenticated</h2><p>Please log in to Strava.</p><button onclick="window.history.back()">Back</button></div>';
-        return;
-    }
-
     try {
         moveAndHideCustomChartSection();
 
         if (DOM.streamCharts) DOM.streamCharts.style.display = 'grid';
 
         const [activityData, streamData] = await Promise.all([
-            fetchActivityDetails(activityId, authPayload),
-            fetchActivityStreams(activityId, authPayload)
+            fetchActivityDetails(activityId),
+            fetchActivityStreams(activityId)
         ]);
 
         console.log('Bike activity loaded:', activityData.name, '|', activityData.sport_type || activityData.type);

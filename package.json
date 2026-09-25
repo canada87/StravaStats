@@ -9,7 +9,6 @@
   },
   "dependencies": {
     "@vercel/speed-insights": "^2.0.0",
-    "fast-xml-parser": "^4.5.0",
-    "node-fetch": "^2.6.7"
+    "fast-xml-parser": "^4.5.0"
   }
 }

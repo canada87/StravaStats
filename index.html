@@ -67,69 +67,6 @@
     <link rel="stylesheet" href="./styles/weather.css">
     <link rel="stylesheet" href="./styles/map.css">
 
-    <style>
-        /* Simple modal for Strava error */
-        #strava-error-modal {
-            display: none;
-            position: fixed;
-            inset: 0;
-            background: rgba(0, 0, 0, 0.45);
-            z-index: 1200;
-            align-items: center;
-            justify-content: center;
-        }
-
-        #strava-error-modal .modal-card {
-            background: #fff;
-            color: #111;
-            width: 92%;
-            max-width: 520px;
-            border-radius: 8px;
-            padding: 20px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
-        }
-
-        #strava-error-modal h3 {
-            margin: 0 0 8px 0;
-            color: #fc5200;
-        }
-
-        #strava-error-modal p {
-            margin: 0 0 16px 0;
-            line-height: 1.4;
-        }
-
-        #strava-error-modal .modal-actions {
-            display: flex;
-            gap: 8px;
-            justify-content: flex-end;
-        }
-
-        #strava-error-modal .btn {
-            padding: 8px 12px;
-            border-radius: 6px;
-            border: none;
-            cursor: pointer;
-        }
-
-        #strava-error-modal .btn--primary {
-            background: #fc5200;
-            color: #fff;
-        }
-
-        #strava-error-modal .btn--secondary {
-            background: #eee;
-            color: #222;
-        }
-
-        #strava-error-modal .btn--link {
-            background: transparent;
-            color: #0066cc;
-        }
-    </style>
-
-
-
     <!-- Analytics -->
     <script>(function (w, d, s, l, i) {
             w[l] = w[l] || []; w[l].push({
@@ -160,40 +97,6 @@
     <!-- End Google Tag Manager (noscript) -->
 
     <div class="container">
-        <!-- LOGIN SECTION -->
-        <div id="login-section">
-            <img src="./icon-sport.svg" alt="StravaStats" style="width:56px;height:56px;margin-bottom:0.5rem;">
-            <h1>StravaStats</h1>
-            <p>Connect your Strava account to visualize your progress and discover new insights.</p>
-            <div id="login-buttons-row" style="display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.5rem;">
-                <button id="login-button" aria-label="Connect with Strava" style="flex: 1; min-width: 200px;">Connect
-                    with Strava</button>
-                <button id="demo-button" aria-label="Try demo with 250 sample activities"
-                    style="flex: 1; min-width: 200px; background-color: #666;">Try Demo</button>
-            </div>
-            <div class="privacy-policy" style="margin-top:1em; font-size:0.85em; color:#888; line-height:1.5;">
-                <strong>Privacy Notice:</strong> Your Strava data is processed in your browser only.
-                Nothing is stored or sent to any server.
-            </div>
-        </div>
-
-        <!-- Strava error modal -->
-        <div id="strava-error-modal" aria-hidden="true">
-            <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="strava-error-title">
-                <h3 id="strava-error-title">Strava connection issue</h3>
-                <p id="strava-error-text">The app couldn't connect to the Strava API.</p>
-                <p style="margin-top:8px; font-size:0.9rem; color:#444;">Important: Strava changed permissions and now
-                    requires a Strava Premium plan for the server-side API access used by this app. As the app author I
-                    need to pay for the premium plan to restore the live connection — users do not need to upgrade their
-                    accounts.</p>
-                <div class="modal-actions">
-                    <button id="strava-modal-back" class="btn btn--secondary">Back</button>
-                    <button id="strava-modal-ko-fi" class="btn btn--link">Donate / Help</button>
-                    <button id="strava-modal-demo" class="btn btn--primary">View demo</button>
-                </div>
-            </div>
-        </div>
-
         <!-- MAIN APP SECTION -->
         <div id="app-section" class="hidden">
             <!-- TOP BAR (logo + tabs + actions in one row) -->
@@ -223,7 +126,7 @@
                         Coach<span class="tab-wip-badge">SOON</span></button>
                 </nav>
                 <nav class="top-bar__actions">
-                    <button id="import-gpx-button" class="action-btn hidden" aria-label="Import GPX activities"
+                    <button id="import-gpx-button" class="action-btn" aria-label="Import GPX activities"
                         title="Import GPX activities">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -248,15 +151,6 @@
                             <polyline points="23 4 23 10 17 10" />
                             <polyline points="1 20 1 14 7 14" />
                             <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-                        </svg>
-                    </button>
-                    <button id="logout-button" class="action-btn action-btn--danger" aria-label="Log out"
-                        title="Log out">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                            <polyline points="16 17 21 12 16 7" />
-                            <line x1="21" y1="12" x2="9" y2="12" />
                         </svg>
                     </button>
                 </nav>

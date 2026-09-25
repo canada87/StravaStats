@@ -22,18 +22,14 @@ export class AdvancedActivityAnalyzer {
             console.log(`📥 Fetching activity ${this.activity_id}...`);
 
             // Fetch activity metadata
-            const activityRes = await fetch(`/api/strava-activity?id=${this.activity_id}`);
+            const activityRes = await fetch(`/api/local-activity?id=${this.activity_id}`);
             if (!activityRes.ok) throw new Error('Failed to fetch activity');
             const activityData = await activityRes.json();
             this.metadata = activityData.activity;
 
-            // Determine required streams based on sport type
-            const streamTypes = this._getRequiredStreams(this.metadata.sport_type || this.metadata.type);
-
-            // Fetch streams
-            const streamsRes = await fetch(
-                `/api/strava-streams?id=${this.activity_id}&type=${encodeURIComponent(streamTypes.join(','))}`
-            );
+            // Fetch streams (local-streams returns every stream present in the GPX; unlike the
+            // old Strava endpoint it doesn't need a `type` filter list)
+            const streamsRes = await fetch(`/api/local-streams?id=${this.activity_id}`);
             if (!streamsRes.ok) throw new Error('Failed to fetch streams');
             const streamsData = await streamsRes.json();
             this.streams = streamsData.streams;
@@ -76,33 +72,6 @@ export class AdvancedActivityAnalyzer {
             console.error('❌ Analysis failed:', error);
             throw error;
         }
-    }
-
-    /**
-     * Get required streams for sport type
-     */
-    _getRequiredStreams(sport_type) {
-        const baseStreams = ['time', 'latlng', 'distance', 'altitude', 'velocity_smooth', 'grade_smooth', 'moving'];
-
-        const sport = (sport_type || '').toLowerCase();
-
-        if (sport.includes('run')) {
-            return [...baseStreams, 'heartrate', 'cadence'];
-        }
-
-        if (sport.includes('ride') || sport.includes('bike')) {
-            return [...baseStreams, 'heartrate', 'cadence', 'watts'];
-        }
-
-        if (sport.includes('hike') || sport.includes('walk')) {
-            return [...baseStreams, 'heartrate'];
-        }
-
-        if (sport.includes('swim') || sport.includes('water')) {
-            return [...baseStreams];
-        }
-
-        return baseStreams;
     }
 
     /**

@@ -26,26 +26,17 @@
          */
         async function routeActivity() {
             try {
-                // Get activity ID from URL
+                // Get activity ID from URL. Kept as a string (not parseInt'd): activity ids are
+                // filename-derived slugs, not always numeric.
                 const params = new URLSearchParams(window.location.search);
-                const activityId = parseInt(params.get('id'), 10);
+                const activityId = params.get('id');
 
                 if (!activityId) {
                     throw new Error('No activity ID provided');
                 }
 
-                // Get auth token
-                const tokens = localStorage.getItem('strava_tokens');
-                if (!tokens) {
-                    throw new Error('Not authenticated');
-                }
-
-                const authPayload = btoa(tokens);
-
                 // Fetch activity details to determine type
-                const response = await fetch(`/api/strava-activity?id=${activityId}`, {
-                    headers: { 'Authorization': `Bearer ${authPayload}` }
-                });
+                const response = await fetch(`/api/local-activity?id=${activityId}`);
 
                 if (!response.ok) {
                     throw new Error(`API Error ${response.status}`);
@@ -53,11 +44,6 @@
 
                 const result = await response.json();
                 const activity = result.activity;
-
-                // Update tokens if needed
-                if (result.tokens) {
-                    localStorage.setItem('strava_tokens', JSON.stringify(result.tokens));
-                }
 
                 // Determine activity type and route accordingly
                 const sportType = activity.sport_type || activity.type || 'Unknown';

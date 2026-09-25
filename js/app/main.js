@@ -1,6 +1,5 @@
 // js/app/main.js
 import '../shared/utils/speed-insights.js';
-import { redirectToStrava, logout, handleAuth, loginWithDemo } from './auth.js';
 import { setupDashboard, showLoading, hideLoading, handleError, } from './ui.js';
 import {
     renderRunAnalysisTab,
@@ -28,13 +27,10 @@ import {
     importGpxFiles,
 } from '../services/index.js';
 import { preprocessActivities } from '../shared/preprocessing/index.js';
-import { isDemoMode } from '../demo/index.js';
-import { loadAppMode, isLocalMode } from '../services/mode.js';
 
 const CACHE_VERSION = 'v2-efficiency-moving-ratio';
 
-document.addEventListener('DOMContentLoaded', async () => {
-    await loadAppMode();
+document.addEventListener('DOMContentLoaded', () => {
     // --- STATE ---
     let allActivities = [];
     let dateFilterFrom = null;
@@ -66,13 +62,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     const renderedTabs = new Set();
 
     // --- DOM REFERENCES ---
-    const loginButton = document.getElementById('login-button');
-    const demoButton = document.getElementById('demo-button');
-    const logoutButton = document.getElementById('logout-button');
     const refreshButton = document.getElementById('refresh-button');
     const importGpxButton = document.getElementById('import-gpx-button');
     const importGpxInput = document.getElementById('import-gpx-input');
-    const loginButtonsRow = document.getElementById('login-buttons-row');
 
     // Run Tab
     const applyFilterButton = document.getElementById('apply-date-filter');
@@ -489,7 +481,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // --- INITIALIZATION ---
-    async function initializeApp(tokenData) {
+    async function initializeApp() {
         const t0 = Date.now();
         const elapsed = () => `${((Date.now() - t0) / 1000).toFixed(1)}s elapsed`;
         showLoading('Preparing dashboard...', 2, elapsed());
@@ -510,18 +502,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                 activities = cachedActivities.activities;
                 progress = 40;
                 showLoading(`Activities loaded from cache (${activities.length})`, progress, elapsed());
-                if (!isDemoMode()) {
-                    console.log(`[Strava] Activities loaded from cache (${activities.length}):`, activities);
-                }
+                console.log(`[Local] Activities loaded from cache (${activities.length}):`, activities);
             } else {
-                showLoading('Downloading activities from Strava...', 18, elapsed());
+                showLoading('Loading imported activities...', 18, elapsed());
                 activities = await fetchAllActivities();
                 progress = 40;
-                showLoading(`Activities downloaded (${activities.length})`, progress, elapsed());
-                if (!isDemoMode()) {
-                    console.log(`[Strava] Activities downloaded from API (${activities.length}):`, activities);
-                }
-                // Cache the raw Strava payload. Preprocessing mutates activity objects and runs on every load.
+                showLoading(`Activities loaded (${activities.length})`, progress, elapsed());
+                console.log(`[Local] Activities loaded (${activities.length}):`, activities);
+                // Preprocessing mutates activity objects and runs on every load, so cache the raw payload.
                 await saveCachedActivities(activities, CACHE_VERSION);
             }
 
@@ -550,14 +538,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                 if (results[0].status === 'fulfilled') {
                     athlete = results[0].value;
-                    if (!isDemoMode()) console.log('[Strava] Athlete data:', athlete);
+                    console.log('[Local] Athlete profile:', athlete);
                 } else {
                     console.warn('Failed to load athlete data:', results[0].reason);
                 }
 
                 if (results[1].status === 'fulfilled') {
                     zones = results[1].value;
-                    if (!isDemoMode()) console.log('[Strava] Training zones:', zones);
+                    console.log('[Local] Training zones:', zones);
                 } else {
                     console.warn('Failed to load zones data:', results[1].reason);
                 }
@@ -580,7 +568,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (athlete) {
                     showLoading('Loading gear usage...', 72, elapsed());
                     gears = await fetchAllGears(athlete);
-                    if (!isDemoMode()) console.log(`[Strava] Gears (${gears.length}):`, gears);
+                    console.log(`[Local] Gears (${gears.length}):`, gears);
                     // Persist gears to cache with 24h TTL
                     setCachedGears(gears);
                 }
@@ -596,16 +584,14 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Phase 3: Preprocess activities (90% -> 100%)
             const preprocessed = await preprocessActivities(activities, athlete, zones, gears);
             allActivities = preprocessed;
-            if (!isDemoMode()) {
-                console.log(`[Strava] Preprocessed activities (${allActivities.length}):`, allActivities);
-                console.log('[Strava] Summary:', {
-                    total: allActivities.length,
-                    byType: allActivities.reduce((acc, a) => { acc[a.type] = (acc[a.type] || 0) + 1; return acc; }, {}),
-                    dateRange: allActivities.length ? `${allActivities[allActivities.length - 1].start_date_local?.slice(0, 10)} → ${allActivities[0].start_date_local?.slice(0, 10)}` : 'N/A',
-                    withHR: allActivities.filter(a => a.average_heartrate).length,
-                    withTSS: allActivities.filter(a => a.tss).length,
-                });
-            }
+            console.log(`[Local] Preprocessed activities (${allActivities.length}):`, allActivities);
+            console.log('[Local] Summary:', {
+                total: allActivities.length,
+                byType: allActivities.reduce((acc, a) => { acc[a.type] = (acc[a.type] || 0) + 1; return acc; }, {}),
+                dateRange: allActivities.length ? `${allActivities[allActivities.length - 1].start_date_local?.slice(0, 10)} → ${allActivities[0].start_date_local?.slice(0, 10)}` : 'N/A',
+                withHR: allActivities.filter(a => a.average_heartrate).length,
+                withTSS: allActivities.filter(a => a.tss).length,
+            });
 
             progress = 100;
             showLoading('Finalizing UI...', progress, elapsed());
@@ -630,7 +616,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     async function refreshActivities() {
         const t0 = Date.now();
         const elapsed = () => `${((Date.now() - t0) / 1000).toFixed(1)}s elapsed`;
-        showLoading('Refreshing activities from Strava...', 20, elapsed());
+        showLoading('Refreshing activities...', 20, elapsed());
         try {
             const activities = await fetchAllActivities();
             const athlete = await fetchAthleteData();
@@ -645,7 +631,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 gears = [];
             }
 
-            // Cache the raw Strava payload before preprocessing mutates activity objects.
+            // Cache the raw payload before preprocessing mutates activity objects.
             await saveCachedActivities(activities, CACHE_VERSION);
 
             // Keep refresh aligned with initial load: preprocessing is rebuilt from raw activities.
@@ -670,7 +656,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 
 
-    // --- LOCAL MODE: GPX IMPORT ---
+    // --- GPX IMPORT ---
     async function importGpxFileList(fileList) {
         const files = Array.from(fileList || []);
         if (files.length === 0) return;
@@ -697,11 +683,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // --- EVENT LISTENERS ---
-    if (loginButton) loginButton.addEventListener('click', redirectToStrava);
-    if (demoButton) demoButton.addEventListener('click', () => {
-        loginWithDemo(initializeApp);
-    });
-    if (logoutButton) logoutButton.addEventListener('click', logout);
     if (refreshButton) refreshButton.addEventListener('click', refreshActivities);
     if (importGpxButton && importGpxInput) {
         importGpxButton.addEventListener('click', () => importGpxInput.click());
@@ -710,7 +691,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             importGpxInput.value = '';
         });
     }
-    // Ko-fi integration removed
 
     // --- SERVICE WORKER REGISTRATION (PWA) ---
     if ('serviceWorker' in navigator) {
@@ -857,24 +837,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // --- APP ENTRY POINT ---
-    if (isLocalMode()) {
-        // No Strava/demo login in local mode: activities come from imported GPX files only.
-        if (loginButtonsRow) loginButtonsRow.classList.add('hidden');
-        if (importGpxButton) importGpxButton.classList.remove('hidden');
-
-        const localTokens = {
-            access_token: 'local',
-            refresh_token: 'local',
-            expires_at: Math.floor(Date.now() / 1000) + 86400,
-        };
-        initializeApp(localTokens).catch(error => {
-            console.error('App failed to start:', error);
-            hideLoading();
-        });
-    } else {
-        handleAuth(initializeApp).catch(error => {
-            console.error('App failed to start:', error);
-            hideLoading();
-        });
-    }
+    // No login of any kind: activities come exclusively from imported GPX files.
+    initializeApp().catch(error => {
+        console.error('App failed to start:', error);
+        hideLoading();
+    });
 });

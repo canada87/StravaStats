@@ -1929,7 +1929,7 @@ export function renderTrainingZones(zones) {
         }
     }
 
-    contentDiv.innerHTML = html || '<p>No custom training zones configured in your Strava profile.</p>';
+    contentDiv.innerHTML = html || '<p>No custom training zones configured.</p>';
 }
 
 // let uiCharts = {}; // Almacén de gráficos para la pestaña "Athlete" para no interferir con los del dashboard principal

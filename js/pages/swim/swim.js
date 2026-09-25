@@ -6,7 +6,6 @@
 
 import { formatDate as sharedFormatDate, formatPaceSwim } from '../../shared/utils/index.js';
 import { renderWeatherAnalysis, renderWeatherMapDetails } from '../../shared/utils/weather-analysis.js';
-import { loadAppMode, isLocalMode } from '../../services/mode.js';
 
 // =====================================================
 // 1. INITIALIZATION & CONFIGURATION
@@ -503,35 +502,22 @@ function initSmoothingControl() {
 // 3. API FUNCTIONS
 // =====================================================
 
-function getAuthPayload() {
-    const tokenString = localStorage.getItem('strava_tokens');
-    if (!tokenString) return null;
-    return btoa(tokenString);
-}
-
-async function fetchFromApi(url, authPayload) {
-    const response = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${authPayload}` }
-    });
+async function fetchFromApi(url) {
+    const response = await fetch(url);
     if (!response.ok) {
         const errorText = await response.text();
         throw new Error(`API Error ${response.status}: ${errorText}`);
     }
-    const result = await response.json();
-    if (result.tokens) {
-        localStorage.setItem('strava_tokens', JSON.stringify(result.tokens));
-    }
-    return result;
+    return response.json();
 }
 
-async function fetchActivityDetails(activityId, authPayload) {
-    const result = await fetchFromApi(`/api/strava-activity?id=${activityId}`, authPayload);
+async function fetchActivityDetails(activityId) {
+    const result = await fetchFromApi(`/api/local-activity?id=${activityId}`);
     return result.activity;
 }
 
-async function fetchActivityStreams(activityId, authPayload) {
-    const streamTypes = 'distance,time,heartrate,cadence';
-    const result = await fetchFromApi(`/api/strava-streams?id=${activityId}&type=${streamTypes}`, authPayload);
+async function fetchActivityStreams(activityId) {
+    const result = await fetchFromApi(`/api/local-streams?id=${activityId}`);
     return result.streams;
 }
 
@@ -558,14 +544,12 @@ function renderActivityInfo(activity) {
     const kudos = Number.isFinite(kudosValue) ? kudosValue : null;
     const commentCount = Number.isFinite(commentValue) ? commentValue : null;
     const tempStr = activity.average_temp !== undefined && activity.average_temp !== null ? `${activity.average_temp}°C` : null;
-    const stravaUrl = activity.id ? `https://www.strava.com/activities/${activity.id}` : null;
     const heroDate = document.getElementById('activity-hero-date');
     const heroDescription = document.getElementById('activity-hero-description');
     const heroType = document.getElementById('activity-hero-type');
     const heroGear = document.getElementById('activity-hero-gear');
     const heroKudos = document.getElementById('activity-hero-kudos');
     const heroComments = document.getElementById('activity-hero-comments');
-    const heroLink = document.getElementById('activity-hero-strava-link');
 
     if (heroDate) heroDate.textContent = date;
     if (heroDescription) heroDescription.textContent = description || 'No description provided.';
@@ -577,7 +561,6 @@ function renderActivityInfo(activity) {
     }
     if (heroKudos) heroKudos.textContent = `❤️ ${kudos !== null ? kudos : '—'}`;
     if (heroComments) heroComments.textContent = `💬 ${commentCount !== null ? commentCount : '—'}`;
-    if (heroLink && stravaUrl) heroLink.href = stravaUrl;
 }
 
 /**
@@ -968,18 +951,14 @@ function renderStreamCharts(streams, activity) {
  */
 async function loadActivityPage() {
     try {
-        // Local mode has no login/tokens at all — the local-* endpoints don't need one,
-        // see LOCAL_GPX_MIGRATION_PLAN.md §6.
-        await loadAppMode();
-        const authPayload = isLocalMode() ? 'local' : getAuthPayload();
-        if (!authPayload || !activityId) {
-            throw new Error('Missing authentication or activity ID');
+        if (!activityId) {
+            throw new Error('Missing activity ID');
         }
 
         // Fetch activity details and streams in parallel
         const [activityDataRaw, streams] = await Promise.all([
-            fetchActivityDetails(activityId, authPayload),
-            fetchActivityStreams(activityId, authPayload)
+            fetchActivityDetails(activityId),
+            fetchActivityStreams(activityId)
         ]);
 
         const activityData = maybeCorrectIndoorSwimForAlex(activityDataRaw);

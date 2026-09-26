@@ -3,7 +3,7 @@
 
 import { formatDistance, formatPace, formatTime, formatDate } from './utils.js';
 import { getCachedGears } from './api.js';
-import { fetchAllGears, setCachedGears, createGear, updateGear, retireGear, bulkAssignGear } from '../services/index.js';
+import { fetchAllGears, setCachedGears, createGear, updateGear, retireGear, deleteGearPermanently, bulkAssignGear } from '../services/index.js';
 
 const SPORT_OPTIONS = ['Run', 'TrailRun', 'Ride', 'MountainBikeRide', 'Swim', 'Hike', 'Walk'];
 
@@ -646,6 +646,7 @@ function createEditSection(gear, price, durationKm) {
             </div>
             <button class="save-gear-details-btn" data-gearid="${gearId}">💾 Save details</button>
             ${!gear.retired ? `<button class="retire-gear-btn" data-gearid="${gearId}">🗑 Retire</button>` : ''}
+            <button class="delete-gear-btn" data-gearid="${gearId}">❌ Delete permanently</button>
 
             <hr>
 
@@ -692,6 +693,12 @@ function attachEventListeners(isEditMode, combinedGearData) {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 handleRetireGear(btn);
+            });
+        });
+        listContainer?.querySelectorAll('.delete-gear-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                handleDeleteGear(btn);
             });
         });
         listContainer?.querySelectorAll('.save-gear-details-btn').forEach(btn => {
@@ -757,6 +764,21 @@ async function handleRetireGear(btn) {
         await refreshGearData();
     } catch (error) {
         showNotification(`Could not retire gear: ${error.message}`, 'error');
+    }
+}
+
+async function handleDeleteGear(btn) {
+    const gearId = btn.getAttribute('data-gearid');
+    if (!confirm('Permanently delete this gear? This cannot be undone. Any activity currently assigned to it will become unassigned (its past distance stays correct).')) return;
+
+    try {
+        await deleteGearPermanently(gearId);
+        showNotification('Gear deleted', 'success');
+        // Deleting also clears gear_id on any activity that referenced it, so the in-memory
+        // activity list main.js holds is now stale: ask it for a full reload (same as bulk-assign).
+        document.dispatchEvent(new CustomEvent('gear-bulk-assigned'));
+    } catch (error) {
+        showNotification(`Could not delete gear: ${error.message}`, 'error');
     }
 }
 

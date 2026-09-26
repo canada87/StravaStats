@@ -590,6 +590,7 @@
 }
 
 .retire-gear-btn,
+.delete-gear-btn,
 .save-gear-details-btn,
 .assign-gear-btn {
     padding: 0.65rem;
@@ -613,10 +614,21 @@
     box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
 }
 
+.delete-gear-btn {
+    background: white;
+    color: #b91c1c;
+    border: 1.5px solid #b91c1c;
+}
+
 .retire-gear-btn:hover,
+.delete-gear-btn:hover,
 .save-gear-details-btn:hover,
 .assign-gear-btn:hover {
     transform: translateY(-2px);
+}
+
+.delete-gear-btn:hover {
+    background: #fef2f2;
 }
 
 .save-gear-btn {

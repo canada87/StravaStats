@@ -1,6 +1,7 @@
 // api/local-gear.js — CRUD for the native gear registry (LOCAL_GPX_MIGRATION_PLAN.md §7).
-// "Delete" retires a gear (retired: true) instead of removing it, so distance history for past
-// activities that reference it stays correct.
+// DELETE retires a gear (retired: true) instead of removing it, so distance history for past
+// activities that reference it stays correct. DELETE with ?hard=true actually removes it from
+// the registry (for gear added by mistake) and clears gear_id on any activity that referenced it.
 
 import { readGear, writeGear, readIndex, writeIndex } from './_local/store.js';
 
@@ -90,7 +91,7 @@ export default async function handler(req, res) {
         }
 
         if (req.method === 'DELETE') {
-            const { id } = req.query;
+            const { id, hard } = req.query;
             if (!id) {
                 return res.status(400).json({ error: 'id is required' });
             }
@@ -99,6 +100,19 @@ export default async function handler(req, res) {
             const idx = gearList.findIndex(g => g.id === id);
             if (idx === -1) {
                 return res.status(404).json({ error: 'Gear not found' });
+            }
+
+            if (hard === 'true') {
+                const nextGear = gearList.filter(g => g.id !== id);
+                await writeGear(nextGear);
+
+                const index = await readIndex();
+                const nextIndex = index.map(activity => (
+                    activity.gear_id === id ? { ...activity, gear_id: null } : activity
+                ));
+                await writeIndex(nextIndex);
+
+                return res.status(200).json({ deleted: true });
             }
 
             const updated = { ...gearList[idx], retired: true };

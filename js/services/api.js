@@ -80,6 +80,11 @@ export async function retireGear(gearId) {
     return result.gear;
 }
 
+export async function deleteGearPermanently(gearId) {
+    const response = await fetch(`/api/local-gear?id=${encodeURIComponent(gearId)}&hard=true`, { method: 'DELETE' });
+    return handleResponse(response);
+}
+
 export async function bulkAssignGear(gearId, dateFrom, dateTo) {
     const response = await fetch('/api/local-gear', {
         method: 'POST',

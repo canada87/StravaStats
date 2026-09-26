@@ -581,3 +581,26 @@ body.activity-page .data-section h3 {
     }
 }
 
+/* =================================================================
+   ROUTE MAP CONTAINER SIZING
+
+   Also recovered from style_backup.css (commit 67623de~1), from two other sections
+   of that file that the "ACTIVITY PAGE REFRESH" block above didn't cover. Without an
+   explicit height here, #activity-map has none (Leaflet renders into a 0-height div,
+   so the route map is invisible even though the polyline data is correct).
+   ================================================================= */
+#activity-map-container {
+    display: flex;
+    flex-direction: column;
+    margin-top: 2rem;
+}
+
+#activity-map {
+    width: 100%;
+    flex-grow: 1;
+    min-height: 400px;
+    height: 450px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+}
+

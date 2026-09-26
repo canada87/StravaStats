@@ -985,6 +985,7 @@ function renderActivityMap(activity, streams) {
             }
             const map = L.map('activity-map').setView(coords[0], 13);
             window.activityRouteMap = map;
+            map.invalidateSize();
             const style = document.getElementById('activity-map-style')?.value || 'osm';
             const layer = MAP_LAYERS[style] || MAP_LAYERS.osm;
             L.tileLayer(layer.url, layer.options).addTo(map);

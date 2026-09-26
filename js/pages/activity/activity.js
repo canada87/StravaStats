@@ -904,6 +904,7 @@ function renderActivityMap(activity, streams) {
             const layer = MAP_LAYERS[style] || MAP_LAYERS.osm;
             const map = L.map('activity-map').setView(coords[0], 13);
             window.activitySharedMap = map;
+            map.invalidateSize();
             L.tileLayer(layer.url, layer.options).addTo(map);
 
             const colorMode = document.getElementById('activity-route-color-mode')?.value || 'route';

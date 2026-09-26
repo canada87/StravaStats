@@ -32,8 +32,12 @@ const CACHE_VERSION = 'v2-efficiency-moving-ratio';
 
 // fetchTrainingZones() always returns null now (no Strava account to read configured zones
 // from — see js/services/api.js). Derive standard %maxHR zones locally instead, so the
-// activity-detail pages' HR distribution chart and run/bike classifiers (which read
-// 'strava_training_zones' from localStorage) keep working without a Strava connection.
+// activity-detail pages' HR distribution chart, run/bike classifiers, and the Trends tab's
+// Training Zones card (which all read 'strava_training_zones' from localStorage) keep working
+// without a Strava connection. `custom_zones: true` isn't a lie here — with no Strava account,
+// this derived set IS the only zones configuration the app has, so js/tabs/athlete.js's
+// renderTrainingZones() (gated on that flag, originally meant to distinguish a Strava athlete's
+// manually-tuned zones from Strava's own defaults) should treat it as configured.
 function buildHrZonesFromMaxHr(maxHr) {
     if (!maxHr || maxHr <= 0) return null;
     const breakpoints = [0, 0.60, 0.70, 0.80, 0.90];
@@ -41,7 +45,7 @@ function buildHrZonesFromMaxHr(maxHr) {
         min: Math.round(maxHr * pct),
         max: i < breakpoints.length - 1 ? Math.round(maxHr * breakpoints[i + 1]) : -1,
     }));
-    return { heart_rate: { zones } };
+    return { heart_rate: { zones, custom_zones: true } };
 }
 
 function persistTrainingZones(zones) {

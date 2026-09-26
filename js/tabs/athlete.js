@@ -41,18 +41,7 @@ export function renderTrendsTab(allActivities, dateFilterFrom, dateFilterTo, spo
     // Apply filtering using the unified helper
     const filteredActivities = filterActivities(allActivities, dateFilterFrom, dateFilterTo, sportFilter);
 
-    const athleteData = JSON.parse(localStorage.getItem('strava_athlete_data'));
     const zonesData = JSON.parse(localStorage.getItem('strava_training_zones'));
-
-    if (athleteData) {
-        console.log('[Athlete Tab] active athlete', {
-            id: athleteData?.id,
-            name: `${athleteData?.firstname || ''} ${athleteData?.lastname || ''}`.trim(),
-            username: athleteData?.username || null,
-        });
-    }
-
-    if (athleteData) renderAthleteProfile(athleteData);
     if (zonesData) renderTrainingZones(zonesData);
 
     // Render panels & charts (order: summary, records, charts)
@@ -1859,22 +1848,6 @@ function renderInteractiveMatrix(runs, dataType = 'count') {
     updateMatrix(); // Inicial
 }
 
-
-export function renderAthleteProfile(athlete) {
-    const container = document.getElementById('athlete-profile-card');
-    if (!container) return;
-    const contentDiv = container.querySelector('.profile-content');
-    if (!contentDiv) return;
-
-    contentDiv.innerHTML = `
-        <img src="${athlete.profile_medium}" alt="Athlete profile picture">
-        <div class="profile-details">
-            <span class="name">${athlete.firstname} ${athlete.lastname}</span>
-            <span class="location">${athlete.city || ''}, ${athlete.country || ''}</span>
-            <span class="stats">Followers: ${athlete.follower_count} | Friends: ${athlete.friend_count}</span>
-        </div>
-    `;
-}
 
 export function renderTrainingZones(zones) {
     const container = document.getElementById('training-zones-card');

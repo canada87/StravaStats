@@ -1,11 +1,12 @@
 // Service Worker para StravaStats PWA
-const CACHE_NAME = 'strava-dashboard-v1';
+// Bumped from v1: forces old clients to drop any cache holding stale /api/* responses or
+// references to files removed when Strava support was stripped out (js/app/auth.js etc).
+const CACHE_NAME = 'stravastats-local-v1';
 const urlsToCache = [
     '/',
     '/index.html',
     '/styles/style.css',
     '/js/app/main.js',
-    '/js/app/auth.js',
     '/js/app/ui.js',
     '/manifest.json',
     '/icon-sport.svg'
@@ -53,17 +54,14 @@ self.addEventListener('fetch', event => {
     // Only handle GET requests - POST/PUT/etc cannot be cached
     if (event.request.method !== 'GET') return;
 
-    // No cachear peticiones a la API de Strava
-    if (event.request.url.includes('api.strava.com')) {
-        return event.respondWith(
-            fetch(event.request).catch(() => {
-                return new Response('Sin conexión - API no disponible', {
-                    status: 503,
-                    statusText: 'Sin conexión'
-                });
-            })
-        );
-    }
+    // Never intercept /api/* calls: they're always dynamic, local-server-only data (imported
+    // activities, gear, streams). A cached or offline fallback response for these is actively
+    // wrong rather than merely stale — and if the SW happens to still be activating right as the
+    // page's first requests go out, `fetch()` here can spuriously reject, in which case the old
+    // code below fell back to a 503 "Sin conexión" text body that broke app initialization with
+    // no server-side trace. Let the browser handle these requests directly, no exceptions.
+    const url = new URL(event.request.url);
+    if (url.pathname.startsWith('/api/')) return;
 
     // Para otros recursos: network first, fallback a cache
     event.respondWith(

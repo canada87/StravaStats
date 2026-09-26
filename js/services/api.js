@@ -54,6 +54,16 @@ export async function importGpxFiles(files) {
     return handleResponse(response);
 }
 
+export async function updateActivityType(activityId, type) {
+    const response = await fetch('/api/local-activity', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: activityId, type }),
+    });
+    const result = await handleResponse(response);
+    return result.activity;
+}
+
 export async function createGear(gearData) {
     const response = await fetch('/api/local-gear', {
         method: 'POST',

@@ -750,6 +750,17 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // --- ACTIVITY SPORT RE-CLASSIFICATION (via custom event) ---
+    // Correcting an activity's sport (js/tabs/activities.js, or from within its own detail page)
+    // changes `type`/`sport_type` on the activity itself, so the allActivities held here goes
+    // stale — pull a fresh copy and re-render, same pattern as the gear bulk-reassign above.
+    document.addEventListener('activity-sport-changed', async () => {
+        await refreshActivities();
+        if (activeTabId === 'activities-tab') {
+            renderActivitiesTab(allActivities);
+        }
+    });
+
     // --- TRENDS FILTER LISTENERS (via custom event) ---
     document.addEventListener('trends-filters-changed', (e) => {
         const { dateFilterFrom: newFrom, dateFilterTo: newTo, sportFilter, dataType, allActivities: activities } = e.detail;

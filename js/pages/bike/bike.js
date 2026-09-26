@@ -5,6 +5,7 @@
  */
 
 import { formatDate as sharedFormatDate, formatSpeedBike } from '../../shared/utils/index.js';
+import { renderSportEditor, attachSportEditor } from '../../shared/utils/sport-editor.js';
 import { renderWeatherAnalysis, renderWeatherMapDetails } from '../../shared/utils/weather-analysis.js';
 
 // =====================================================
@@ -425,7 +426,11 @@ function renderActivityInfo(activity) {
 
     if (heroDate) heroDate.textContent = date;
     if (heroDescription) heroDescription.textContent = description || 'No description provided.';
-    if (heroType) heroType.textContent = activity.sport_type || activity.type || 'Ride';
+    if (heroType) {
+        heroType.textContent = activity.sport_type || activity.type || 'Ride';
+        heroType.insertAdjacentHTML('afterend', renderSportEditor(activity.type || activity.sport_type || 'Ride'));
+        attachSportEditor(heroType.parentElement, activity.id);
+    }
     if (heroGear) {
         heroGear.innerHTML = gearId
             ? `<a href="../html/gear.html?id=${gearId}">${gear || gearId}</a>`

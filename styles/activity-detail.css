@@ -624,3 +624,65 @@ body.activity-page .data-section h3 {
     border: 1px solid var(--border-color);
 }
 
+/* =================================================================
+   SPORT EDITOR (js/shared/utils/sport-editor.js)
+
+   Appears next to the sport badge in the hero (run/bike/swim.html) or inline in the Info
+   panel (activity.html) — lets the user fix a misclassified activity without re-importing.
+   ================================================================= */
+/* Border/background use currentColor + transparency so the pill reads on both the dark hero
+   (run/bike/swim.html) and the plain light Info panel (activity.html, no .activity-page body). */
+.sport-editor__toggle {
+    display: inline-flex;
+    align-items: center;
+    min-height: 40px;
+    padding: 0.5rem 0.75rem;
+    border-radius: 14px;
+    border: 1px solid currentColor;
+    background: rgba(128, 128, 128, 0.12);
+    color: inherit;
+    opacity: 0.85;
+    font-size: 0.82rem;
+    cursor: pointer;
+}
+
+.sport-editor__toggle:hover {
+    opacity: 1;
+    background: rgba(128, 128, 128, 0.2);
+}
+
+.sport-editor__form {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.sport-editor__select {
+    font: inherit;
+    padding: 0.35rem 0.5rem;
+    border-radius: 8px;
+    border: 1px solid rgba(128, 128, 128, 0.4);
+    background: #fff;
+    color: #111827;
+}
+
+.sport-editor__save,
+.sport-editor__cancel {
+    font: inherit;
+    font-size: 0.82rem;
+    padding: 0.35rem 0.6rem;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+}
+
+.sport-editor__save {
+    background: #4f46e5;
+    color: #fff;
+}
+
+.sport-editor__cancel {
+    background: rgba(128, 128, 128, 0.2);
+    color: inherit;
+}
+

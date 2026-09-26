@@ -1,8 +1,13 @@
 import * as utils from './utils.js';
+import { showNotification } from './gear.js';
+import { updateActivityType } from '../services/index.js';
 
 const RUN_TYPES = new Set(['Run', 'TrailRun', 'VirtualRun']);
 const SWIM_TYPES = new Set(['Swim', 'OpenWaterSwim']);
 const BIKE_TYPES = new Set(['Ride', 'VirtualRide', 'GravelRide', 'MountainBikeRide', 'EBikeRide']);
+// Sport values the "Sport" column's inline editor offers — every value the app already has
+// pace/cadence-unit or emoji handling for (the three sets above, plus Hike/Walk).
+const SPORT_TYPE_OPTIONS = ['Run', 'TrailRun', 'VirtualRun', 'Ride', 'VirtualRide', 'GravelRide', 'MountainBikeRide', 'EBikeRide', 'Swim', 'OpenWaterSwim', 'Hike', 'Walk'];
 
 function sportEmoji(type) { return utils.sportEmoji(type); }
 function getType(a) { return (a.sport_type || a.type || 'Unknown').trim(); }
@@ -409,7 +414,16 @@ const COLUMNS = [
     },
     {
         key: 'type', label: 'Sport',
-        format: (v, a) => { const t = getType(a); return `${sportEmoji(t)} <small>${t}</small>`; },
+        format: (v, a) => {
+            const t = getType(a);
+            // The current value might not be in our known list (e.g. legacy/unrecognized
+            // sport strings) — keep it selectable so the dropdown never silently changes it.
+            const options = SPORT_TYPE_OPTIONS.includes(t) ? SPORT_TYPE_OPTIONS : [t, ...SPORT_TYPE_OPTIONS];
+            const optionsHtml = options.map(opt =>
+                `<option value="${escapeHtml(opt)}" ${opt === t ? 'selected' : ''}>${sportEmoji(opt)} ${escapeHtml(opt)}</option>`
+            ).join('');
+            return `<select class="act-sport-select" data-activity-id="${escapeHtml(a.id)}" data-previous-type="${escapeHtml(t)}" title="Fix a misclassified sport">${optionsHtml}</select>`;
+        },
         csv: (v, a) => getType(a)
     },
     {
@@ -513,6 +527,33 @@ export function renderActivitiesTab(allActivities) {
     const counterEl = document.getElementById('act-counter');
 
     if (!tableEl) return;
+
+    // Wired once: tableEl itself survives re-renders (only its innerHTML is replaced), so a
+    // delegated listener here keeps working across sorts/filters without re-attaching per row.
+    if (!tableEl._sportEditWired) {
+        tableEl._sportEditWired = true;
+        tableEl.addEventListener('change', async (e) => {
+            const select = e.target.closest('.act-sport-select');
+            if (!select) return;
+
+            const activityId = select.dataset.activityId;
+            const previousType = select.dataset.previousType;
+            const newType = select.value;
+            select.disabled = true;
+
+            try {
+                await updateActivityType(activityId, newType);
+                showNotification(`Sport updated to ${newType} — refreshing...`, 'success');
+                // Changes type/sport_type on the activity itself, so the in-memory activity list
+                // main.js holds is now stale: ask it for a full reload (same pattern as gear.js).
+                document.dispatchEvent(new CustomEvent('activity-sport-changed'));
+            } catch (error) {
+                showNotification(`Could not update sport: ${error.message}`, 'error');
+                if (previousType) select.value = previousType;
+                select.disabled = false;
+            }
+        });
+    }
 
     if (!allActivities || allActivities.length === 0) {
         tableEl.innerHTML = `<thead><tr><th>No Activities</th></tr></thead>

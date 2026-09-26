@@ -8,6 +8,7 @@ import { formatDate as sharedFormatDate, formatPace as sharedFormatPace, formatP
 import { AdvancedActivityAnalyzer } from './advanced-analysis.js';
 import { AnalysisResultsUI } from './analysis-ui-components.js';
 import { renderWeatherAnalysis, renderWeatherMapDetails } from '../../shared/utils/weather-analysis.js';
+import { renderSportEditor, attachSportEditor } from '../../shared/utils/sport-editor.js';
 
 // =====================================================
 // 1. INITIALIZATION & CONFIGURATION
@@ -772,13 +773,14 @@ function renderActivityInfo(activity) {
             <li><b>Title:</b> ${name}</li>
             ${description ? `<li><b>Description:</b> ${description}</li>` : ''}
             <li><b>Date:</b> ${date}</li>
-            <li><b>Type:</b> ${activityType}</li>
+            <li><b>Type:</b> ${activityType} ${renderSportEditor(activity.type || activity.sport_type || activityType)}</li>
             <li><b>Gear:</b> ${gear}</li>
             <li><b>Temperature:</b> ${tempStr}</li>
             <li><b>Comments:</b> ${commentCount}</li>
             <li><b>Kudos:</b> ${kudos}</li>
         </ul>
     `;
+    attachSportEditor(DOM.info, activity.id);
 }
 
 /**

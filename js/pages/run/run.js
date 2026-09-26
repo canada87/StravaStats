@@ -6,6 +6,7 @@
 
 import { formatDate as sharedFormatDate, formatPace as sharedFormatPace, formatPaceRun } from '../../shared/utils/index.js';
 import { renderWeatherAnalysis, renderWeatherMapDetails } from '../../shared/utils/weather-analysis.js';
+import { renderSportEditor, attachSportEditor } from '../../shared/utils/sport-editor.js';
 
 // =====================================================
 // 1. INITIALIZATION & CONFIGURATION
@@ -814,7 +815,11 @@ function renderActivityInfo(activity) {
 
     if (heroDate) heroDate.textContent = date;
     if (heroDescription) heroDescription.textContent = description || 'No description provided.';
-    if (heroType) heroType.textContent = activityType;
+    if (heroType) {
+        heroType.textContent = activityType;
+        heroType.insertAdjacentHTML('afterend', renderSportEditor(activity.type || activityType));
+        attachSportEditor(heroType.parentElement, activity.id);
+    }
     if (heroGear) {
         heroGear.innerHTML = gearId
             ? `<a href="../html/gear.html?id=${gearId}">${gear || gearId}</a>`

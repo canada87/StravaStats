@@ -3,6 +3,9 @@
 
 import { formatDistance, formatPace, formatTime, formatDate } from './utils.js';
 import { getCachedGears } from './api.js';
+import { fetchAllGears, setCachedGears, createGear, updateGear, retireGear, bulkAssignGear } from '../services/index.js';
+
+const SPORT_OPTIONS = ['Run', 'TrailRun', 'Ride', 'MountainBikeRide', 'Swim', 'Hike', 'Walk'];
 
 // ===================================================================
 // SHARED UTILITIES (exported for use by gear-analysis.js etc.)
@@ -39,6 +42,9 @@ export function showNotification(message, type = 'info') {
 
 let gearChartInstance = null;
 let gearGanttChartInstance = null;
+let lastRuns = [];
+let lastFilter = 'all';
+let lastShowRetired = false;
 
 // ===================================================================
 // INTERNAL HELPERS
@@ -48,6 +54,14 @@ function getGears() {
     const cached = getCachedGears();
     if (cached) return cached;
     return JSON.parse(localStorage.getItem('strava_gears') || '[]');
+}
+
+// Locally-created gear always has an explicit type ('shoe'/'bike'/'unknown', set at creation
+// time — see api/local-gear.js). Only fall back to the Strava-era frame_type/weight heuristic
+// for gear that predates that (there shouldn't be any left, but it's a harmless fallback).
+function resolveGearType(g) {
+    if (g.type === 'bike' || g.type === 'shoe' || g.type === 'unknown') return g.type;
+    return ('frame_type' in g || 'weight' in g) ? 'bike' : 'shoe';
 }
 
 function bikeFrameTypeLabel(frameType) {
@@ -146,14 +160,6 @@ function showError(container, message) {
     if (container) container.innerHTML = `<div class="error-state">⚠️ ${message}</div>`;
 }
 
-function showEmptyState(elements) {
-    elements.list.innerHTML = '<div class="empty-state">📭 No gear data available</div>';
-    if (gearChartInstance) { gearChartInstance.destroy(); gearChartInstance = null; }
-    if (gearGanttChartInstance) { gearGanttChartInstance.destroy(); gearGanttChartInstance = null; }
-    if (elements.chartContainer) elements.chartContainer.style.display = 'none';
-    if (elements.ganttContainer) elements.ganttContainer.style.display = 'none';
-}
-
 function showElements(elements) {
     if (elements.chartContainer) elements.chartContainer.style.display = '';
     if (elements.ganttContainer) elements.ganttContainer.style.display = '';
@@ -165,6 +171,9 @@ function showElements(elements) {
 
 export function renderGearTab(allActivities) {
     const runs = allActivities.filter(a => a.type && a.gear_id && a.gear_id.trim() !== '');
+    lastRuns = runs;
+    lastFilter = 'all';
+    lastShowRetired = false;
 
     const elements = {
         container: document.getElementById('gear-tab'),
@@ -181,10 +190,9 @@ export function renderGearTab(allActivities) {
         return;
     }
 
-    if (runs.length === 0) {
-        showEmptyState(elements);
-        return;
-    }
+    // Note: the gear list/add-form always renders below, even with zero activities tagged with
+    // gear (a brand new local install has none) — only the charts hide themselves when there's
+    // nothing to plot. Registering gear is independent of whether any activity already uses it.
 
     // Remove previous filter/summary bars on re-render
     document.getElementById('gear-filters')?.remove();
@@ -195,6 +203,12 @@ export function renderGearTab(allActivities) {
     renderGearSection(runs, 'all', false);
     renderGearChart(runs, 'all');
     renderGearGanttChart(runs, 'all');
+}
+
+async function refreshGearData() {
+    const gears = await fetchAllGears();
+    setCachedGears(gears);
+    updateGearDisplay(lastRuns, lastFilter, lastShowRetired);
 }
 
 // ===================================================================
@@ -213,30 +227,118 @@ function addGearFilters(container, runs) {
         <label class="gear-retired-toggle">
             <input type="checkbox" id="show-retired-check"> Show retired
         </label>
+        <button id="add-gear-btn" class="edit-toggle-btn">➕ Add gear</button>
     `;
     container.insertBefore(filterDiv, container.firstChild);
 
-    let currentFilter = 'all';
     const retiredCheck = filterDiv.querySelector('#show-retired-check');
 
     filterDiv.addEventListener('click', (e) => {
+        const addBtn = e.target.closest('#add-gear-btn');
+        if (addBtn) {
+            toggleAddGearForm(container, filterDiv);
+            return;
+        }
         const btn = e.target.closest('button.gear-filter-btn');
         if (!btn) return;
         filterDiv.querySelectorAll('.gear-filter-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
-        currentFilter = btn.dataset.filter;
-        updateGearDisplay(runs, currentFilter, retiredCheck.checked);
+        lastFilter = btn.dataset.filter;
+        updateGearDisplay(runs, lastFilter, retiredCheck.checked);
     });
 
     retiredCheck.addEventListener('change', () => {
-        updateGearDisplay(runs, currentFilter, retiredCheck.checked);
+        lastShowRetired = retiredCheck.checked;
+        updateGearDisplay(runs, lastFilter, lastShowRetired);
     });
 }
 
 function updateGearDisplay(runs, filter, showRetired) {
+    lastRuns = runs;
+    lastFilter = filter;
+    lastShowRetired = showRetired;
     renderGearSection(runs, filter, showRetired);
     renderGearChart(runs, filter);
     renderGearGanttChart(runs, filter);
+}
+
+// ===================================================================
+// ADD GEAR FORM
+// ===================================================================
+
+function toggleAddGearForm(container, filterDiv) {
+    const existing = document.getElementById('add-gear-form');
+    if (existing) {
+        existing.remove();
+        return;
+    }
+
+    const formDiv = document.createElement('div');
+    formDiv.id = 'add-gear-form';
+    formDiv.className = 'gear-edit-section';
+    formDiv.innerHTML = `
+        <div class="edit-input-group">
+            <label>Type</label>
+            <select id="new-gear-type">
+                <option value="shoe">👟 Shoe</option>
+                <option value="bike">🚴 Bike</option>
+                <option value="unknown">Other</option>
+            </select>
+        </div>
+        <div class="edit-input-group">
+            <label>Brand</label>
+            <input type="text" id="new-gear-brand" placeholder="e.g. Nike">
+        </div>
+        <div class="edit-input-group">
+            <label>Model</label>
+            <input type="text" id="new-gear-model" placeholder="e.g. Pegasus 40">
+        </div>
+        <div class="edit-input-group">
+            <label>Purchase date</label>
+            <input type="date" id="new-gear-purchase-date">
+        </div>
+        <div class="edit-input-group">
+            <label>Initial distance (km)</label>
+            <input type="number" id="new-gear-initial-km" value="0" min="0">
+        </div>
+        <div class="edit-input-group">
+            <label>Default for sport</label>
+            <div id="new-gear-sports">
+                ${SPORT_OPTIONS.map(sport => `
+                    <label class="gear-sport-check">
+                        <input type="checkbox" value="${sport}" ${sport === 'Run' ? 'checked' : ''}> ${sport}
+                    </label>
+                `).join('')}
+            </div>
+        </div>
+        <button id="submit-new-gear-btn" class="save-gear-btn">💾 Create</button>
+    `;
+    filterDiv.insertAdjacentElement('afterend', formDiv);
+
+    formDiv.querySelector('#submit-new-gear-btn').addEventListener('click', () => handleCreateGear(formDiv));
+}
+
+async function handleCreateGear(formDiv) {
+    const type = formDiv.querySelector('#new-gear-type').value;
+    const brand_name = formDiv.querySelector('#new-gear-brand').value.trim();
+    const model_name = formDiv.querySelector('#new-gear-model').value.trim();
+    const purchase_date = formDiv.querySelector('#new-gear-purchase-date').value || null;
+    const initial_distance_km = parseFloat(formDiv.querySelector('#new-gear-initial-km').value) || 0;
+    const default_for_sport = Array.from(formDiv.querySelectorAll('#new-gear-sports input:checked')).map(el => el.value);
+
+    if (!brand_name && !model_name) {
+        showNotification('Enter at least a brand or model name', 'error');
+        return;
+    }
+
+    try {
+        await createGear({ type, brand_name, model_name, purchase_date, initial_distance_km, default_for_sport });
+        formDiv.remove();
+        showNotification('Gear created!', 'success');
+        await refreshGearData();
+    } catch (error) {
+        showNotification(`Could not create gear: ${error.message}`, 'error');
+    }
 }
 
 // ===================================================================
@@ -257,7 +359,7 @@ async function renderGearSection(runs, filter = 'all', showRetired = false) {
 
     const processedGears = allGears.map(gear => {
         const g = { ...gear };
-        g.type = ('frame_type' in g || 'weight' in g) ? 'bike' : 'shoe';
+        g.type = resolveGearType(g);
         g.notification_distance = g.type === 'shoe' ? (g.notification_distance ?? 700) : null;
         return g;
     });
@@ -394,7 +496,7 @@ function createGearCard(data, isEditMode) {
     const statusBadges = createStatusBadges(gear, needsReplacement);
     const durabilityBar = createDurabilityBar(durabilityPercent, totalKm, durationKm);
     const stats = createStatsSection(metrics, gear, euroPerKm);
-    const editSection = isEditMode ? createEditSection(gear.id, price, durationKm) : '';
+    const editSection = isEditMode ? createEditSection(gear, price, durationKm) : '';
 
     const accentColor = gear.type === 'bike' ? '#3b82f6' : '#f59e0b';
     const iconBg = gear.type === 'bike' ? 'rgba(59,130,246,0.1)' : 'rgba(245,158,11,0.1)';
@@ -504,7 +606,14 @@ function createStatsSection(metrics, gear, euroPerKm) {
     `;
 }
 
-function createEditSection(gearId, price, durationKm) {
+function createEditSection(gear, price, durationKm) {
+    const gearId = gear.id;
+    const sportChecks = SPORT_OPTIONS.map(sport => `
+        <label class="gear-sport-check">
+            <input type="checkbox" value="${sport}" ${(gear.default_for_sport || []).includes(sport) ? 'checked' : ''}> ${sport}
+        </label>
+    `).join('');
+
     return `
         <div class="gear-edit-section" onclick="event.stopPropagation()">
             <div class="edit-input-group">
@@ -516,6 +625,39 @@ function createEditSection(gearId, price, durationKm) {
                 <input type="number" id="duration-${gearId}" value="${durationKm}" min="1">
             </div>
             <button class="save-gear-btn" data-gearid="${gearId}">💾 Save</button>
+
+            <hr>
+
+            <div class="edit-input-group">
+                <label>Name</label>
+                <input type="text" id="name-${gearId}" value="${gear.name || ''}">
+            </div>
+            <div class="edit-input-group">
+                <label>Brand</label>
+                <input type="text" id="brand-${gearId}" value="${gear.brand_name || ''}">
+            </div>
+            <div class="edit-input-group">
+                <label>Model</label>
+                <input type="text" id="model-${gearId}" value="${gear.model_name || ''}">
+            </div>
+            <div class="edit-input-group">
+                <label>Default for sport</label>
+                <div id="sports-${gearId}">${sportChecks}</div>
+            </div>
+            <button class="save-gear-details-btn" data-gearid="${gearId}">💾 Save details</button>
+            ${!gear.retired ? `<button class="retire-gear-btn" data-gearid="${gearId}">🗑 Retire</button>` : ''}
+
+            <hr>
+
+            <div class="edit-input-group">
+                <label>Assign to activities from</label>
+                <input type="date" id="assign-from-${gearId}">
+            </div>
+            <div class="edit-input-group">
+                <label>to</label>
+                <input type="date" id="assign-to-${gearId}">
+            </div>
+            <button class="assign-gear-btn" data-gearid="${gearId}">📌 Assign period to this gear</button>
         </div>
     `;
 }
@@ -536,10 +678,32 @@ function attachEventListeners(isEditMode, combinedGearData) {
     }
 
     if (isEditMode) {
-        document.querySelectorAll('.save-gear-btn').forEach(btn => {
+        // Scoped to the list container: the add-gear form (outside this container) reuses the
+        // same .save-gear-btn styling class for its own "Create" button and attaches its own
+        // listener separately — a document-wide query here would double-bind that button too.
+        const listContainer = document.getElementById('gear-info-list');
+        listContainer?.querySelectorAll('.save-gear-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 handleSaveGear(btn, combinedGearData);
+            });
+        });
+        listContainer?.querySelectorAll('.retire-gear-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                handleRetireGear(btn);
+            });
+        });
+        listContainer?.querySelectorAll('.save-gear-details-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                handleSaveGearDetails(btn);
+            });
+        });
+        listContainer?.querySelectorAll('.assign-gear-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                handleBulkAssign(btn);
             });
         });
     }
@@ -565,6 +729,58 @@ function handleSaveGear(btn, combinedGearData) {
     showNotification('Gear updated!', 'success');
 }
 
+async function handleSaveGearDetails(btn) {
+    const gearId = btn.getAttribute('data-gearid');
+    const name = document.getElementById(`name-${gearId}`).value.trim();
+    const brand_name = document.getElementById(`brand-${gearId}`).value.trim();
+    const model_name = document.getElementById(`model-${gearId}`).value.trim();
+    const default_for_sport = Array.from(
+        document.querySelectorAll(`#sports-${gearId} input:checked`)
+    ).map(el => el.value);
+
+    try {
+        await updateGear({ id: gearId, name, brand_name, model_name, default_for_sport });
+        showNotification('Gear details updated!', 'success');
+        await refreshGearData();
+    } catch (error) {
+        showNotification(`Could not update gear: ${error.message}`, 'error');
+    }
+}
+
+async function handleRetireGear(btn) {
+    const gearId = btn.getAttribute('data-gearid');
+    if (!confirm('Retire this gear? Past distance stays correct, it just stops being auto-assigned to new activities.')) return;
+
+    try {
+        await retireGear(gearId);
+        showNotification('Gear retired', 'success');
+        await refreshGearData();
+    } catch (error) {
+        showNotification(`Could not retire gear: ${error.message}`, 'error');
+    }
+}
+
+async function handleBulkAssign(btn) {
+    const gearId = btn.getAttribute('data-gearid');
+    const dateFrom = document.getElementById(`assign-from-${gearId}`).value || null;
+    const dateTo = document.getElementById(`assign-to-${gearId}`).value || null;
+
+    if (!dateFrom && !dateTo) {
+        showNotification('Pick at least one date to limit the range', 'error');
+        return;
+    }
+
+    try {
+        const result = await bulkAssignGear(gearId, dateFrom, dateTo);
+        showNotification(`Assigned to ${result.updated} activities — refreshing...`, 'success');
+        // Bulk-assign changes gear_id on activities themselves (not just the gear registry), so
+        // the in-memory activity list main.js holds is now stale: ask it for a full reload.
+        document.dispatchEvent(new CustomEvent('gear-bulk-assigned'));
+    } catch (error) {
+        showNotification(`Could not assign gear: ${error.message}`, 'error');
+    }
+}
+
 // ===================================================================
 // CHART: Cumulative Distance Over Time
 // ===================================================================
@@ -579,7 +795,7 @@ async function renderGearChart(runs, filter = 'all') {
         const allGears = getGears();
         const validGearIds = new Set(
             allGears
-                .map(g => ({ ...g, type: ('frame_type' in g || 'weight' in g) ? 'bike' : 'shoe' }))
+                .map(g => ({ ...g, type: resolveGearType(g) }))
                 .filter(g => g.type === filter)
                 .map(g => g.id)
         );
@@ -678,7 +894,7 @@ export async function renderGearGanttChart(runs, filter = 'all') {
     const allGears = getGears();
     const processedGears = allGears.map(g => ({
         ...g,
-        type: ('frame_type' in g || 'weight' in g) ? 'bike' : 'shoe'
+        type: resolveGearType(g)
     }));
 
     const filteredGears = filter === 'all' ? processedGears : processedGears.filter(g => g.type === filter);

@@ -559,7 +559,8 @@
     color: #374151;
 }
 
-.edit-input-group input {
+.edit-input-group input,
+.edit-input-group select {
     padding: 0.55rem 0.75rem;
     border: 2px solid #e5e7eb;
     border-radius: 8px;
@@ -567,12 +568,55 @@
     transition: all 0.3s ease;
     width: 100%;
     box-sizing: border-box;
+    font-family: inherit;
+    background: #fff;
 }
 
-.edit-input-group input:focus {
+.edit-input-group input:focus,
+.edit-input-group select:focus {
     outline: none;
     border-color: #6366f1;
     box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.gear-sport-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    margin: 0.15rem 0.6rem 0.15rem 0;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: #374151;
+}
+
+.retire-gear-btn,
+.save-gear-details-btn,
+.assign-gear-btn {
+    padding: 0.65rem;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    color: white;
+}
+
+.save-gear-details-btn,
+.assign-gear-btn {
+    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+}
+
+.retire-gear-btn {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+}
+
+.retire-gear-btn:hover,
+.save-gear-details-btn:hover,
+.assign-gear-btn:hover {
+    transform: translateY(-2px);
 }
 
 .save-gear-btn {

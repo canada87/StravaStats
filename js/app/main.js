@@ -705,6 +705,19 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // --- GEAR BULK REASSIGNMENT (via custom event) ---
+    // Bulk-assigning a gear to a date range (js/tabs/gear.js) changes gear_id on the activities
+    // themselves, so the allActivities held here goes stale — pull a fresh copy and re-render.
+    document.addEventListener('gear-bulk-assigned', async () => {
+        await refreshActivities();
+        // refreshActivities() re-renders whichever tab activateTab() considers "newly" active,
+        // but it no-ops when the gear tab was already the active one (see activateTab above) —
+        // which is exactly the case here, since that's where this event always fires from.
+        if (activeTabId === 'gear-tab') {
+            renderGearTab(allActivities);
+        }
+    });
+
     // --- TRENDS FILTER LISTENERS (via custom event) ---
     document.addEventListener('trends-filters-changed', (e) => {
         const { dateFilterFrom: newFrom, dateFilterTo: newTo, sportFilter, dataType, allActivities: activities } = e.detail;

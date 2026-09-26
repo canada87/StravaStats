@@ -54,6 +54,41 @@ export async function importGpxFiles(files) {
     return handleResponse(response);
 }
 
+export async function createGear(gearData) {
+    const response = await fetch('/api/local-gear', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(gearData),
+    });
+    const result = await handleResponse(response);
+    return result.gear;
+}
+
+export async function updateGear(gearData) {
+    const response = await fetch('/api/local-gear', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(gearData),
+    });
+    const result = await handleResponse(response);
+    return result.gear;
+}
+
+export async function retireGear(gearId) {
+    const response = await fetch(`/api/local-gear?id=${encodeURIComponent(gearId)}`, { method: 'DELETE' });
+    const result = await handleResponse(response);
+    return result.gear;
+}
+
+export async function bulkAssignGear(gearId, dateFrom, dateTo) {
+    const response = await fetch('/api/local-gear', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'bulk-assign', gearId, dateFrom, dateTo }),
+    });
+    return handleResponse(response);
+}
+
 export function getCachedGears() {
     const cached = localStorage.getItem(GEAR_CACHE_KEY);
     const timestamp = Number(localStorage.getItem(`${GEAR_CACHE_KEY}_timestamp`) || 0);

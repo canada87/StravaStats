@@ -1,0 +1,26 @@
+# Stack per Portainer (deploy "vero", non per lo sviluppo/test locale — per quello usa
+# docker-compose.yml). Prima di distribuirlo:
+#
+#   1. Sostituisci /CHANGE_ME/stravastats-data qui sotto con il percorso reale sul filesystem
+#      dell'host Portainer dove vuoi che vivano i dati (attività importate + gear.json). Deve
+#      essere un percorso persistente (non una cartella temporanea del container).
+#   2. Se in Portainer distribuisci questo stack tramite "Git repository" (build dal Dockerfile
+#      nel repo), "build: ." funziona così com'è. Se invece incolli lo stack nel Web editor senza
+#      un repo collegato, Portainer non ha il contesto per fare build: builda l'immagine altrove
+#      (es. `docker build -t stravastats:latest .` e push su un registry) e sostituisci "build: ."
+#      con "image: <tuo-registry>/stravastats:latest".
+#   3. Cambia la porta pubblicata (3001) se sull'host è già occupata o se la esponi dietro un
+#      reverse proxy con un'altra porta.
+
+services:
+  app:
+    build: .
+    container_name: stravastats
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      - DATA_DIR=/data
+      - HOST=0.0.0.0
+    volumes:
+      - /CHANGE_ME/stravastats-data:/data

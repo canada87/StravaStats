@@ -5,7 +5,7 @@
 //   DATA_DIR/gear.json
 //   DATA_DIR/athlete.json
 
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { encodePolyline } from './polyline.js';
@@ -117,6 +117,15 @@ export async function readActivitySummary(id) {
 
 export async function readActivityStreams(id) {
     return readJsonFile(path.join(activityDir(id), 'streams.json'), null);
+}
+
+export async function deleteActivity(id) {
+    const index = await readIndex();
+    if (!index.some(a => a.id === id)) return false;
+
+    await rm(activityDir(id), { recursive: true, force: true });
+    await writeIndex(index.filter(a => a.id !== id));
+    return true;
 }
 
 export async function updateActivitySummary(id, patch) {

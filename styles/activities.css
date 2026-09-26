@@ -219,6 +219,26 @@
     cursor: wait;
 }
 
+.act-delete-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 0.85rem;
+    opacity: 0.55;
+    padding: 0.1rem 0.3rem;
+    border-radius: 4px;
+}
+
+.act-delete-btn:hover {
+    opacity: 1;
+    background: #fef2f2;
+}
+
+.act-delete-btn:disabled {
+    opacity: 0.3;
+    cursor: wait;
+}
+
 .act-name-link {
     color: inherit;
     text-decoration: none;

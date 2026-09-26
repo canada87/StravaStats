@@ -754,11 +754,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // --- ACTIVITY SPORT RE-CLASSIFICATION (via custom event) ---
-    // Correcting an activity's sport (js/tabs/activities.js, or from within its own detail page)
-    // changes `type`/`sport_type` on the activity itself, so the allActivities held here goes
-    // stale — pull a fresh copy and re-render, same pattern as the gear bulk-reassign above.
-    document.addEventListener('activity-sport-changed', async () => {
+    // --- ACTIVITY LIST CHANGED (via custom event) ---
+    // Correcting an activity's sport, or deleting an activity outright — both from
+    // js/tabs/activities.js or from within an activity's own detail page — change the
+    // activities themselves, so the allActivities held here goes stale — pull a fresh copy and
+    // re-render, same pattern as the gear bulk-reassign above.
+    document.addEventListener('activities-changed', async () => {
         await refreshActivities();
         if (activeTabId === 'activities-tab') {
             renderActivitiesTab(allActivities);

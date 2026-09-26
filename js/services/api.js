@@ -64,6 +64,11 @@ export async function updateActivityType(activityId, type) {
     return result.activity;
 }
 
+export async function deleteActivity(activityId) {
+    const response = await fetch(`/api/local-activity?id=${encodeURIComponent(activityId)}`, { method: 'DELETE' });
+    return handleResponse(response);
+}
+
 export async function createGear(gearData) {
     const response = await fetch('/api/local-gear', {
         method: 'POST',

@@ -6,6 +6,7 @@
 
 import { formatDate as sharedFormatDate, formatPaceSwim } from '../../shared/utils/index.js';
 import { renderSportEditor, attachSportEditor } from '../../shared/utils/sport-editor.js';
+import { attachDeleteActivityButton } from '../../shared/utils/activity-delete.js';
 import { renderWeatherAnalysis, renderWeatherMapDetails } from '../../shared/utils/weather-analysis.js';
 
 // =====================================================
@@ -979,6 +980,7 @@ async function loadActivityPage() {
         }
 
         // Render all sections
+        attachDeleteActivityButton(document.getElementById('delete-activity-btn'), activityData.id);
         renderActivityInfo(activityData);
         renderActivityStats(activityData);
         renderActivityAdvanced(activityData);

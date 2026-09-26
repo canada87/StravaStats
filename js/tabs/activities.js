@@ -1,6 +1,6 @@
 import * as utils from './utils.js';
 import { showNotification } from './gear.js';
-import { updateActivityType } from '../services/index.js';
+import { updateActivityType, deleteActivity } from '../services/index.js';
 
 const RUN_TYPES = new Set(['Run', 'TrailRun', 'VirtualRun']);
 const SWIM_TYPES = new Set(['Swim', 'OpenWaterSwim']);
@@ -428,7 +428,8 @@ const COLUMNS = [
     },
     {
         key: 'name', label: 'Name',
-        format: (v, a) => `<a class="act-name-link" href="html/activity-router.html?id=${a.id}" target="_blank">${v || '—'}</a>`,
+        format: (v, a) => `<a class="act-name-link" href="html/activity-router.html?id=${a.id}" target="_blank">${v || '—'}</a>
+            <button type="button" class="act-delete-btn" data-activity-id="${escapeHtml(a.id)}" title="Delete this activity permanently">🗑</button>`,
         csv: (v) => v || ''
     },
     {
@@ -530,8 +531,8 @@ export function renderActivitiesTab(allActivities) {
 
     // Wired once: tableEl itself survives re-renders (only its innerHTML is replaced), so a
     // delegated listener here keeps working across sorts/filters without re-attaching per row.
-    if (!tableEl._sportEditWired) {
-        tableEl._sportEditWired = true;
+    if (!tableEl._rowActionsWired) {
+        tableEl._rowActionsWired = true;
         tableEl.addEventListener('change', async (e) => {
             const select = e.target.closest('.act-sport-select');
             if (!select) return;
@@ -546,11 +547,29 @@ export function renderActivitiesTab(allActivities) {
                 showNotification(`Sport updated to ${newType} — refreshing...`, 'success');
                 // Changes type/sport_type on the activity itself, so the in-memory activity list
                 // main.js holds is now stale: ask it for a full reload (same pattern as gear.js).
-                document.dispatchEvent(new CustomEvent('activity-sport-changed'));
+                document.dispatchEvent(new CustomEvent('activities-changed'));
             } catch (error) {
                 showNotification(`Could not update sport: ${error.message}`, 'error');
                 if (previousType) select.value = previousType;
                 select.disabled = false;
+            }
+        });
+
+        tableEl.addEventListener('click', async (e) => {
+            const btn = e.target.closest('.act-delete-btn');
+            if (!btn) return;
+
+            if (!confirm('Delete this activity permanently? The GPX file and all its data will be removed. This cannot be undone.')) return;
+
+            const activityId = btn.dataset.activityId;
+            btn.disabled = true;
+            try {
+                await deleteActivity(activityId);
+                showNotification('Activity deleted — refreshing...', 'success');
+                document.dispatchEvent(new CustomEvent('activities-changed'));
+            } catch (error) {
+                showNotification(`Could not delete activity: ${error.message}`, 'error');
+                btn.disabled = false;
             }
         });
     }

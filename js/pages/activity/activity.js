@@ -9,6 +9,7 @@ import { AdvancedActivityAnalyzer } from './advanced-analysis.js';
 import { AnalysisResultsUI } from './analysis-ui-components.js';
 import { renderWeatherAnalysis, renderWeatherMapDetails } from '../../shared/utils/weather-analysis.js';
 import { renderSportEditor, attachSportEditor } from '../../shared/utils/sport-editor.js';
+import { attachDeleteActivityButton } from '../../shared/utils/activity-delete.js';
 
 // =====================================================
 // 1. INITIALIZATION & CONFIGURATION
@@ -1786,6 +1787,7 @@ async function main() {
         populateDynamicChartData(initialSmoothedStreams, false);
 
         // Render all sections
+        attachDeleteActivityButton(document.getElementById('delete-activity-btn'), activityData.id);
         renderActivityInfo(activityData);
         renderActivityStats(activityData);
         renderAdvancedStats(activityData);

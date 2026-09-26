@@ -686,3 +686,23 @@ body.activity-page .data-section h3 {
     color: inherit;
 }
 
+.btn-delete-activity {
+    font: inherit;
+    padding: 0.5rem 0.9rem;
+    margin-left: 0.5rem;
+    border-radius: 8px;
+    border: 1px solid #ef4444;
+    background: #fff;
+    color: #b91c1c;
+    cursor: pointer;
+}
+
+.btn-delete-activity:hover {
+    background: #fef2f2;
+}
+
+.btn-delete-activity:disabled {
+    opacity: 0.6;
+    cursor: wait;
+}
+

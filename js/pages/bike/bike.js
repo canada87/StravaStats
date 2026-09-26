@@ -6,6 +6,7 @@
 
 import { formatDate as sharedFormatDate, formatSpeedBike } from '../../shared/utils/index.js';
 import { renderSportEditor, attachSportEditor } from '../../shared/utils/sport-editor.js';
+import { attachDeleteActivityButton } from '../../shared/utils/activity-delete.js';
 import { renderWeatherAnalysis, renderWeatherMapDetails } from '../../shared/utils/weather-analysis.js';
 
 // =====================================================
@@ -1475,6 +1476,7 @@ async function main() {
         const initialSmoothed = applySmoothingToStreams(originalStreamData, currentSmoothingLevel);
         populateDynamicChartData(initialSmoothed, false);
 
+        attachDeleteActivityButton(document.getElementById('delete-activity-btn'), activityData.id);
         renderActivityInfo(activityData);
         renderActivityStats(activityData, streamData);
         renderAdvancedStats(activityData);

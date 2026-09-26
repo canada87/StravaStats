@@ -2,6 +2,9 @@
 
 import { formatPace, formatTime, formatDate, formatSpeedBike } from '../../shared/utils/index.js';
 import { getCachedActivities } from '../../services/activity-cache.js';
+import { fetchAllActivities } from '../../services/api.js';
+
+const CACHE_MAX_AGE_MS = 60 * 60 * 1000; // 1 hour — same freshness bound js/app/main.js uses
 
 // ===================================================================
 // HELPERS
@@ -49,8 +52,12 @@ function statRow(label, value) {
 // ===================================================================
 
 export async function renderGearDetailPage(gearId) {
-    const activityCache = await getCachedActivities();
-    const allActivities = activityCache?.activities || [];
+    // getCachedActivities() with no bound would happily serve an arbitrarily old cache entry —
+    // including one saved before GPX imports started encoding a route polyline. That left this
+    // page's map stuck showing only a start-point dot for anyone whose cache predated the fix, so
+    // an aged/missing cache falls back to a live fetch instead of silently using stale data.
+    const activityCache = await getCachedActivities({ maxAgeMs: CACHE_MAX_AGE_MS });
+    const allActivities = activityCache?.activities || await fetchAllActivities();
     const allGears = JSON.parse(localStorage.getItem('strava_gears') || '[]');
     const gear = allGears.find(g => g.id === gearId);
 
@@ -339,6 +346,7 @@ function renderGearMap(activities) {
     if (!activities.length) { mapContainer.innerHTML = '<p style="padding:1rem;color:#64748b;">No location data.</p>'; return; }
 
     const map = L.map('gear-map').setView([40.7128, -74.006], 10);
+    map.invalidateSize();
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors' }).addTo(map);
 
     const palette = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#3b82f6', '#8b5cf6', '#ec4899', '#06b6d4'];

@@ -8,6 +8,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
+import { encodePolyline } from './polyline.js';
 
 export function getDataDir() {
     return process.env.DATA_DIR
@@ -57,8 +58,43 @@ async function writeJsonFile(filePath, data) {
 
 // --- Activities -----------------------------------------------------------
 
+// Self-healing migration: activities imported before summary_polyline was introduced have
+// map.summary_polyline: null, which breaks the route map on every page that reads it (the map
+// tab and every standalone activity detail page all decode this field, not the raw lat/lng
+// stream). Since the full lat/lng stream is already on disk, backfill it once and persist —
+// no re-import needed, and this becomes a no-op once every summary has it.
+async function backfillMissingPolylines(list) {
+    let changed = false;
+    const result = [];
+
+    for (const item of list) {
+        if (item.map?.summary_polyline || !item.id) {
+            result.push(item);
+            continue;
+        }
+
+        const streams = await readJsonFile(path.join(activityDir(item.id), 'streams.json'), null);
+        if (!streams?.latlng?.data?.length) {
+            result.push(item);
+            continue;
+        }
+
+        const patched = { ...item, map: { ...item.map, summary_polyline: encodePolyline(streams.latlng.data) } };
+        await writeJsonFile(path.join(activityDir(item.id), 'summary.json'), patched);
+        result.push(patched);
+        changed = true;
+    }
+
+    if (changed) {
+        await writeJsonFile(indexPath(), result);
+    }
+
+    return result;
+}
+
 export async function readIndex() {
-    return readJsonFile(indexPath(), []);
+    const list = await readJsonFile(indexPath(), []);
+    return backfillMissingPolylines(list);
 }
 
 export async function writeIndex(list) {

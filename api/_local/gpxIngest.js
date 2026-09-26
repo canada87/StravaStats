@@ -5,6 +5,7 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { parseGpx } from './gpxParser.js';
 import { enrichPoints, summarizeStreams } from './enrich.js';
+import { encodePolyline } from './polyline.js';
 import { readIndex, writeIndex, saveActivity, readGear } from './store.js';
 
 const GPX_TYPE_TO_SPORT = {
@@ -118,6 +119,10 @@ export async function ingestGpxFile(filename, data) {
     const candidates = gearList.filter(g => !g.retired && Array.isArray(g.default_for_sport) && g.default_for_sport.includes(sportType));
     const gearId = candidates.length === 1 ? candidates[0].id : null;
 
+    // Every consumer (js/tabs/maps.js, and the route map on each standalone activity detail
+    // page) reads the route back out of this encoded polyline, not the raw lat/lng stream.
+    const summaryPolyline = encodePolyline(streams.latlng.data);
+
     const summary = {
         id,
         content_hash: contentHash,
@@ -144,7 +149,7 @@ export async function ingestGpxFile(filename, data) {
         suffer_score: null,
         calories: null,
         device_name: null,
-        map: { summary_polyline: null },
+        map: { summary_polyline: summaryPolyline },
         source_file: filename,
     };
 

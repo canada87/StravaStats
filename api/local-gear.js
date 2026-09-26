@@ -19,6 +19,19 @@ async function handleBulkAssign(req, res) {
         return res.status(400).json({ error: 'gearId is required' });
     }
 
+    const gearList = await readGear();
+    const gear = gearList.find(g => g.id === gearId);
+    if (!gear) {
+        return res.status(404).json({ error: 'Gear not found' });
+    }
+
+    // Restrict to activities whose sport the gear is actually meant for (the same
+    // default_for_sport list new GPX imports use to auto-assign gear — see
+    // ingestGpxFile() in api/_local/gpxIngest.js) — a date range alone says nothing about
+    // sport, so without this a shoe's "assign to past activities" would just as happily grab
+    // bike rides that happened to fall in the same window.
+    const allowedSports = Array.isArray(gear.default_for_sport) ? gear.default_for_sport : [];
+
     const index = await readIndex();
     const from = dateFrom ? new Date(dateFrom) : null;
     const to = dateTo ? new Date(dateTo) : null;
@@ -28,6 +41,10 @@ async function handleBulkAssign(req, res) {
         const activityDate = new Date(activity.start_date);
         const inRange = (!from || activityDate >= from) && (!to || activityDate <= to);
         if (!inRange) return activity;
+        if (allowedSports.length > 0) {
+            const sport = activity.sport_type || activity.type;
+            if (!allowedSports.includes(sport)) return activity;
+        }
         updated++;
         return { ...activity, gear_id: gearId };
     });

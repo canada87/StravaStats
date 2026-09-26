@@ -70,7 +70,13 @@ export async function renderGearDetailPage(gearId) {
         return;
     }
 
-    gear.type = ('frame_type' in gear || 'weight' in gear) ? 'bike' : 'shoe';
+    // Prefer the explicit type our backend writes; the frame_type/weight heuristic was a
+    // Strava-era guess that never matches local gear (those fields don't exist here), which
+    // made every bike's own detail page render as if it were a shoe (same bug already fixed for
+    // the Gear tab's list/filter via resolveGearType() in js/tabs/gear.js).
+    gear.type = gear.type === 'bike' || gear.type === 'shoe'
+        ? gear.type
+        : (('frame_type' in gear || 'weight' in gear) ? 'bike' : 'shoe');
 
     const gearActivities = allActivities
         .filter(a => a.gear_id === gearId)

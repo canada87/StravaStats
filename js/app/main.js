@@ -30,6 +30,29 @@ import { preprocessActivities } from '../shared/preprocessing/index.js';
 
 const CACHE_VERSION = 'v2-efficiency-moving-ratio';
 
+// fetchTrainingZones() always returns null now (no Strava account to read configured zones
+// from — see js/services/api.js). Derive standard %maxHR zones locally instead, so the
+// activity-detail pages' HR distribution chart and run/bike classifiers (which read
+// 'strava_training_zones' from localStorage) keep working without a Strava connection.
+function buildHrZonesFromMaxHr(maxHr) {
+    if (!maxHr || maxHr <= 0) return null;
+    const breakpoints = [0, 0.60, 0.70, 0.80, 0.90];
+    const zones = breakpoints.map((pct, i) => ({
+        min: Math.round(maxHr * pct),
+        max: i < breakpoints.length - 1 ? Math.round(maxHr * breakpoints[i + 1]) : -1,
+    }));
+    return { heart_rate: { zones } };
+}
+
+function persistTrainingZones(zones) {
+    if (!zones) return;
+    try {
+        localStorage.setItem('strava_training_zones', JSON.stringify(zones));
+    } catch (_e) {
+        // Storage full/unavailable: per-activity HR zone charts will just stay empty.
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     // --- STATE ---
     let allActivities = [];
@@ -563,6 +586,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 showLoading('Athlete/zones unavailable, continuing...', 65, elapsed());
             }
 
+            if (!zones && athlete?.max_hr) {
+                zones = buildHrZonesFromMaxHr(athlete.max_hr);
+            }
+            persistTrainingZones(zones);
+
             // Try to load gears - also optional
             try {
                 if (athlete) {
@@ -620,7 +648,11 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const activities = await fetchAllActivities();
             const athlete = await fetchAthleteData();
-            const zones = await fetchTrainingZones();
+            let zones = await fetchTrainingZones();
+            if (!zones && athlete?.max_hr) {
+                zones = buildHrZonesFromMaxHr(athlete.max_hr);
+            }
+            persistTrainingZones(zones);
             let gears = [];
 
             try {

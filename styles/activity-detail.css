@@ -582,6 +582,26 @@ body.activity-page .data-section h3 {
 }
 
 /* =================================================================
+   HR ZONES CHART CONTAINER SIZING
+
+   Same recovery as below: without this, .chart-container-inner (wrapping the
+   hr-zones-chart canvas) has no height, so Chart.js measures a 0-height canvas
+   and draws nothing even though the chart data is correct.
+   ================================================================= */
+#hr-zones-section {
+    display: flex;
+    flex-direction: column;
+}
+
+.chart-container-inner {
+    flex-grow: 1;
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-height: 250px;
+}
+
+/* =================================================================
    ROUTE MAP CONTAINER SIZING
 
    Also recovered from style_backup.css (commit 67623de~1), from two other sections

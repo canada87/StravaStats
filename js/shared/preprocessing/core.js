@@ -1,5 +1,6 @@
 // js/preprocessing.js
 import { rollingMean, calculateEnvironmentalDifficulty } from '../utils/index.js';
+import { loadWeatherCache, saveWeatherEntries, buildWeatherCacheKey } from '../../services/weather-cache.js';
 
 // ===================================================================
 // CONFIGURACIÓN
@@ -418,15 +419,31 @@ async function groupByDay(activities) {
         return daily;
     }
 
-    // Fetch weather in batches with a hard total-time cap
+    // Historical weather never changes: serve what we can from the persistent cache
+    // and only hit the network for runs not seen before.
+    const weatherCache = await loadWeatherCache();
+    const toFetch = [];
+    runs.forEach(run => {
+        const key = buildWeatherCacheKey(run);
+        const cached = key ? weatherCache.get(key) : null;
+        if (cached) {
+            run.weather = cached;
+            run.difficulty = cached.difficulty;
+        } else {
+            toFetch.push(run);
+        }
+    });
+
+    // Fetch missing weather in batches with a hard total-time cap
     const batches = 5;
     const weatherStart = Date.now();
-    for (let i = 0; i < runs.length; i += batches) {
+    const newEntries = [];
+    for (let i = 0; i < toFetch.length; i += batches) {
         if (Date.now() - weatherStart > WEATHER_TOTAL_TIMEOUT_MS) {
-            console.warn(`[Weather] Total timeout reached after ${WEATHER_TOTAL_TIMEOUT_MS}ms — skipping remaining ${runs.length - i} runs`);
+            console.warn(`[Weather] Total timeout reached after ${WEATHER_TOTAL_TIMEOUT_MS}ms — skipping remaining ${toFetch.length - i} runs`);
             break;
         }
-        const batch = runs.slice(i, i + batches);
+        const batch = toFetch.slice(i, i + batches);
         const weatherPromises = batch.map(run => getWeatherForRun(run));
         const weatherResults = await Promise.all(weatherPromises);
 
@@ -435,6 +452,8 @@ async function groupByDay(activities) {
             if (weather) {
                 run.weather = weather;
                 run.difficulty = weather.difficulty;
+                const key = buildWeatherCacheKey(run);
+                if (key) newEntries.push([key, weather]);
             } else {
                 run.difficulty = 0; // default
             }
@@ -443,6 +462,7 @@ async function groupByDay(activities) {
         // Sleep to avoid rate limiting
         await new Promise(resolve => setTimeout(resolve, 100));
     }
+    await saveWeatherEntries(newEntries);
 
     activities.forEach(a => {
         const date = a.start_date_local?.split('T')[0];

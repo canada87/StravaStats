@@ -340,10 +340,44 @@ async function groupByDay(activities) {
 // ===================================================================
 // 4. Serie temporal
 // ===================================================================
-function getTimeSeries(daily) {
-    const dates = Object.keys(daily).sort();
-    const tssValues = dates.map(d => daily[d].tss);
-    return { dates, tssValues };
+function toYmd(date) {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+/**
+ * Continuous calendar series from the first activity to `endDate` (default: today), with rest
+ * days counted as 0 TSS. ATL/CTL are rolling means over calendar days, so fitness and fatigue
+ * keep evolving (decaying) while no activity is logged instead of freezing at the last session.
+ * Needs `activity.tss` to be already computed.
+ */
+export function buildDailyLoadSeries(activities, endDate = new Date()) {
+    const tssByDay = new Map();
+    let first = null;
+    let last = null;
+
+    activities.forEach(a => {
+        const key = a.start_date_local?.split('T')[0];
+        if (!key) return;
+        tssByDay.set(key, (tssByDay.get(key) || 0) + (Number(a.tss) || 0));
+        if (!first || key < first) first = key;
+        if (!last || key > last) last = key;
+    });
+
+    if (!first) {
+        return { dates: [], tssValues: [], atl: [], ctl: [], tsb: [], rampRate: [], injuryRisk: [] };
+    }
+
+    const end = toYmd(endDate) > last ? toYmd(endDate) : last;
+    const [fy, fm, fd] = first.split('-').map(Number);
+    const dates = [];
+    for (let cursor = new Date(fy, fm - 1, fd); toYmd(cursor) <= end; cursor.setDate(cursor.getDate() + 1)) {
+        dates.push(toYmd(cursor));
+    }
+
+    const tssValues = dates.map(d => tssByDay.get(d) || 0);
+    const pmc = calculatePMC(tssValues);
+    const injuryRisk = calculateInjuryRiskImproved(pmc.tsb, pmc.rampRate, pmc.atl, tssValues);
+    return { dates, tssValues, atl: pmc.atl, ctl: pmc.ctl, tsb: pmc.tsb, rampRate: pmc.rampRate, injuryRisk };
 }
 
 // ===================================================================
@@ -615,9 +649,9 @@ export async function preprocessActivities(activities, userProfile = {}, zones =
 
     activities.forEach(a => calculateTSS(a, maxHr, hrZones));
 
-    const daily = await groupByDay(activities);
-    const { dates, tssValues } = getTimeSeries(daily);
-    const pmc = calculatePMC(tssValues);
+    await groupByDay(activities); // fills weather/difficulty + VO2max on each activity
+    const { dates, atl, ctl, tsb, rampRate, tssValues } = buildDailyLoadSeries(activities);
+    const pmc = { atl, ctl, tsb, rampRate, tssSeries: tssValues };
     const injuryRisk = calculateInjuryRiskImproved(pmc.tsb, pmc.rampRate, pmc.atl, pmc.tssSeries);
     const recoveryHours = calculateRecoveryHoursSeries(activities, dates);
 

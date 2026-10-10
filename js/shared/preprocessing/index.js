@@ -1,1 +1,1 @@
-export { preprocessActivities } from './core.js';
+export { preprocessActivities, buildDailyLoadSeries } from './core.js';

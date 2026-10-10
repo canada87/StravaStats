@@ -1,4 +1,5 @@
 import * as utils from './utils.js';
+import { buildDailyLoadSeries } from '../shared/preprocessing/index.js';
 
 let selectedRangeDays = 'alltime'; // 'alltime' | 'year:YYYY' | 'custom'
 let customDateFromIso = null;
@@ -407,21 +408,16 @@ function buildRollingSevenDayLoad(activities, rangeStart, rangeEnd) {
     if (!sorted.length) return null;
 
     const tssByDay = new Map();
-    const metricsByDay = new Map();
     const recoveryByDay = new Map();
+
+    // CTL/ATL/TSB/risk per calendar day (rest days included), same series the activities carry
+    const dailyLoad = buildDailyLoadSeries(sorted);
+    const dailyLoadIndex = new Map(dailyLoad.dates.map((date, i) => [date, i]));
 
     sorted.forEach(activity => {
         const date = new Date(activity.start_date_local);
         const key = toLocalYMD(date);
         tssByDay.set(key, (tssByDay.get(key) || 0) + (activity.tss || 0));
-
-        const existing = metricsByDay.get(key) || { ctlSum: 0, atlSum: 0, tsbSum: 0, riskSum: 0, count: 0 };
-        existing.ctlSum += activity.ctl || 0;
-        existing.atlSum += activity.atl || 0;
-        existing.tsbSum += activity.tsb || 0;
-        existing.riskSum += activity.injuryRisk || 0;
-        existing.count += 1;
-        metricsByDay.set(key, existing);
 
         // Calculate recovery hours for this day (max of all sessions + weighted sum of rest)
         if (!recoveryByDay.has(key)) {
@@ -478,7 +474,7 @@ function buildRollingSevenDayLoad(activities, rangeStart, rangeEnd) {
     // Calculate from day 0 to TODAY, regardless of visible range
     while (cursor <= today) {
         const key = toLocalYMD(cursor);
-        const entry = metricsByDay.get(key);
+        const loadIndex = dailyLoadIndex.get(key);
         const dayTss = tssByDay.get(key) || 0;
 
         rollingTssWindow.push(dayTss);
@@ -487,11 +483,11 @@ function buildRollingSevenDayLoad(activities, rangeStart, rangeEnd) {
             rollingTssSum -= rollingTssWindow.shift();
         }
 
-        if (entry && entry.count) {
-            lastCtl = entry.ctlSum / entry.count;
-            lastAtl = entry.atlSum / entry.count;
-            lastTsb = entry.tsbSum / entry.count;
-            lastRisk = entry.riskSum / entry.count;
+        if (loadIndex !== undefined) {
+            lastCtl = dailyLoad.ctl[loadIndex];
+            lastAtl = dailyLoad.atl[loadIndex];
+            lastTsb = dailyLoad.tsb[loadIndex];
+            lastRisk = dailyLoad.injuryRisk[loadIndex];
         }
 
         if (recoveryByDay.has(key)) {
@@ -515,6 +511,17 @@ function buildRollingSevenDayLoad(activities, rangeStart, rangeEnd) {
         labels, load7d, ctlDaily, atlDaily, tsbDaily, riskDaily, recoveryDaily, sorted,
         fullStart, today, visibleStart, visibleEnd
     };
+}
+
+/**
+ * Formats an ISO day label (YYYY-MM-DD) for chart axes and tooltips.
+ */
+function formatChartDate(isoLabel, mode) {
+    const date = new Date(`${isoLabel}T00:00:00`);
+    if (isNaN(date)) return isoLabel;
+    if (mode === 'month-year') return date.toLocaleDateString('default', { month: 'short', year: 'numeric' });
+    if (mode === 'day-month') return date.toLocaleDateString('default', { day: 'numeric', month: 'short' });
+    return date.toLocaleDateString('default', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 function getPercentileValue(values, percentile) {
@@ -2242,12 +2249,8 @@ function renderAcuteLoadChart(activities, rangeStart, rangeEnd) {
         return date >= rangeStart && date <= rangeEnd ? i : -1;
     }).filter(i => i !== -1);
 
-    const labels = series.labels
-        .filter((_, i) => visibleIndices.includes(i))
-        .map(label => {
-            const date = new Date(`${label}T00:00:00`);
-            return `${date.getMonth() + 1}/${date.getDate()}`;
-        });
+    const labels = series.labels.filter((_, i) => visibleIndices.includes(i));
+    const spansYears = labels.length > 400;
 
     const load7d = series.load7d.filter((_, i) => visibleIndices.includes(i));
     const ctl7dBase = series.ctlDaily.filter((_, i) => visibleIndices.includes(i)).map(value => +(value * 7).toFixed(1));
@@ -2364,6 +2367,9 @@ function renderAcuteLoadChart(activities, rangeStart, rangeEnd) {
                     mode: 'index',
                     intersect: false,
                     callbacks: {
+                        title(items) {
+                            return items.length ? formatChartDate(items[0].label, 'full') : '';
+                        },
                         label(context) {
                             if (context.dataset.label === 'Ideal range floor') {
                                 return null;
@@ -2383,7 +2389,13 @@ function renderAcuteLoadChart(activities, rangeStart, rangeEnd) {
             scales: {
                 x: {
                     title: { display: true, text: 'Date' },
-                    ticks: { maxTicksLimit: 10 },
+                    ticks: {
+                        maxTicksLimit: 10,
+                        // Always include the year when the range is long, otherwise "8/7 … 10/26 …" is ambiguous
+                        callback(value) {
+                            return formatChartDate(this.getLabelForValue(value), spansYears ? 'month-year' : 'day-month');
+                        }
+                    },
                     grid: { display: false }
                 },
                 y: {
@@ -2755,11 +2767,18 @@ function getWeekNumber(date) {
 const currentYear = new Date().getFullYear();
 const currentMonth = new Date().getMonth();
 
-// Period shown by the two goal charts. View-only state: the goals themselves stay global
+// Period shown by the goal charts. View-only state: the goals themselves stay global
 // (localStorage 'training_goals') and are not stored per year/month. Resets to "now" on reload.
-let goalAnnualYear = currentYear;
-let goalMonthlyYear = currentYear;
-let goalMonthlyMonth = currentMonth;
+// The year applies to both the annual and the monthly charts; the month to the monthly ones.
+let goalYear = currentYear;
+let goalMonth = currentMonth;
+
+const GOAL_METRICS = ['km', 'hours', 'activities'];
+const DEFAULT_GOALS = {
+    km: { annual: 1000, monthly: 100 },
+    hours: { annual: 150, monthly: 15 },
+    activities: { annual: 200, monthly: 20 }
+};
 
 function getGoalYears(activities) {
     const years = new Set([currentYear, ...getAvailableYears(activities)]);
@@ -2801,8 +2820,12 @@ function filterActivitiesBySport(activities, sport) {
 }
 
 function loadGoals() {
-    const saved = JSON.parse(localStorage.getItem('training_goals') || 'null');
-    return saved || { km: { annual: 1000, monthly: 100 }, hours: { annual: 150, monthly: 15 }, activities: { annual: 200, monthly: 20 }, selectedMetric: 'km', selectedSport: 'all' };
+    const goals = JSON.parse(localStorage.getItem('training_goals') || 'null') || {};
+    GOAL_METRICS.forEach(metric => {
+        goals[metric] = { ...DEFAULT_GOALS[metric], ...(goals[metric] || {}) };
+    });
+    goals.selectedSport = goals.selectedSport || 'all';
+    return goals;
 }
 
 function saveGoals(goals) {
@@ -2836,14 +2859,9 @@ export function renderGoalsSectionAdvanced(allActivities) {
     if (!container) return;
 
     const goals = loadGoals();
-    const metric = goals.selectedMetric || 'km';
-    const sport = goals.selectedSport || 'all';
-    const cfg = metricConfig[metric];
-    const annualGoal = goals[metric]?.annual || 1000;
-    const monthlyGoal = goals[metric]?.monthly || 100;
+    const sport = goals.selectedSport;
     const goalYears = getGoalYears(allActivities);
-    if (!goalYears.includes(goalAnnualYear)) goalAnnualYear = currentYear;
-    if (!goalYears.includes(goalMonthlyYear)) goalMonthlyYear = currentYear;
+    if (!goalYears.includes(goalYear)) goalYear = currentYear;
 
     if (!document.getElementById('goals-section')) {
         const goalsDiv = document.createElement('div');
@@ -2854,72 +2872,23 @@ export function renderGoalsSectionAdvanced(allActivities) {
 
     const div = document.getElementById('goals-section');
     div.innerHTML = `
-    <!-- METRIC SELECTOR TABS -->
-    <div id="goal-metric-tabs" style="display:flex;gap:0.5rem;margin-bottom:0.5rem;flex-wrap:wrap;">
-        <button class="goal-metric-btn ${metric === 'km' ? 'active' : ''}" data-metric="km" style="padding:0.5rem 1rem;border:1px solid #ddd;border-radius:4px;cursor:pointer;background:${metric === 'km' ? '#007bff' : '#fff'};color:${metric === 'km' ? '#fff' : '#333'};">Distance (km)</button>
-        <button class="goal-metric-btn ${metric === 'hours' ? 'active' : ''}" data-metric="hours" style="padding:0.5rem 1rem;border:1px solid #ddd;border-radius:4px;cursor:pointer;background:${metric === 'hours' ? '#007bff' : '#fff'};color:${metric === 'hours' ? '#fff' : '#333'};">Time (hours)</button>
-        <button class="goal-metric-btn ${metric === 'activities' ? 'active' : ''}" data-metric="activities" style="padding:0.5rem 1rem;border:1px solid #ddd;border-radius:4px;cursor:pointer;background:${metric === 'activities' ? '#007bff' : '#fff'};color:${metric === 'activities' ? '#fff' : '#333'};">Activities</button>
-    </div>
     <!-- SPORT SELECTOR -->
     <div id="goal-sport-tabs" style="display:flex;gap:0.5rem;margin-bottom:1rem;flex-wrap:wrap;">
         ${GOAL_SPORTS.map(s => `<button class="goal-sport-btn ${sport === s.value ? 'active' : ''}" data-sport="${s.value}" style="padding:0.4rem 0.9rem;border:1px solid #ddd;border-radius:4px;cursor:pointer;background:${sport === s.value ? '#fc5200' : '#fff'};color:${sport === s.value ? '#fff' : '#333'};font-size:0.9em;">${s.label}</button>`).join('')}
     </div>
-
-    <div style="display:flex;gap:2rem;flex-wrap:wrap;">
-        <!-- YEARLY GOAL -->
-        <div style="flex:1;min-width:300px;background:white;padding:1.5rem;border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,0.1);">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
-                <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
-                    <h4 style="margin:0;">Annual Goal</h4>
-                    <select id="goal-annual-year" aria-label="Annual goal year" style="${GOAL_SELECT_STYLE}">${renderYearOptions(goalYears, goalAnnualYear)}</select>
-                </div>
-                <div>
-                    <input type="number" id="annual-goal" value="${annualGoal}" min="1"
-                           style="width:100px;padding:0.5rem;border:1px solid #ddd;border-radius:4px;">
-                    <span style="margin-left:0.5rem;">${cfg.unit}</span>
-                    <button id="update-annual-btn" style="margin-left:1rem;padding:0.5rem 1rem;background:#007bff;color:white;border:none;border-radius:4px;cursor:pointer;">
-                        Update
-                    </button>
-                </div>
-            </div>
-            <div id="annual-stats" style="margin-bottom:1rem;padding:0.8rem;background:#f8f9fa;border-radius:4px;"></div>
-            <canvas id="annual-goal-chart" style="max-height:300px;width:100%;"></canvas>
-        </div>
-
-        <!-- MONTHLY GOAL -->
-        <div style="flex:1;min-width:300px;background:white;padding:1.5rem;border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,0.1);">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
-                <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
-                    <h4 style="margin:0;">Monthly Goal</h4>
-                    <select id="goal-monthly-month" aria-label="Monthly goal month" style="${GOAL_SELECT_STYLE}">${renderMonthOptions(goalMonthlyMonth)}</select>
-                    <select id="goal-monthly-year" aria-label="Monthly goal year" style="${GOAL_SELECT_STYLE}">${renderYearOptions(goalYears, goalMonthlyYear)}</select>
-                </div>
-                <div>
-                    <input type="number" id="monthly-goal" value="${monthlyGoal}" min="1"
-                           style="width:100px;padding:0.5rem;border:1px solid #ddd;border-radius:4px;">
-                    <span style="margin-left:0.5rem;">${cfg.unit}</span>
-                    <button id="update-monthly-btn" style="margin-left:1rem;padding:0.5rem 1rem;background:#007bff;color:white;border:none;border-radius:4px;cursor:pointer;">
-                        Update
-                    </button>
-                </div>
-            </div>
-            <div id="monthly-stats" style="margin-bottom:1rem;padding:0.8rem;background:#f8f9fa;border-radius:4px;"></div>
-            <canvas id="monthly-goal-chart" style="max-height:300px;width:100%;"></canvas>
-        </div>
+    <!-- PERIOD SELECTORS (year: annual + monthly charts, month: monthly charts) -->
+    <div id="goal-period-controls" style="display:flex;gap:1.25rem;align-items:center;flex-wrap:wrap;margin-bottom:1.5rem;">
+        <label style="display:inline-flex;align-items:center;gap:0.5rem;">Year
+            <select id="goal-year" style="${GOAL_SELECT_STYLE}">${renderYearOptions(goalYears, goalYear)}</select>
+        </label>
+        <label style="display:inline-flex;align-items:center;gap:0.5rem;">Month
+            <select id="goal-month" style="${GOAL_SELECT_STYLE}">${renderMonthOptions(goalMonth)}</select>
+        </label>
     </div>
+    ${GOAL_METRICS.map(metric => renderGoalPairHtml(metric, goals)).join('')}
 `;
 
-    // Metric tab listeners
-    div.querySelectorAll('.goal-metric-btn').forEach(btn => {
-        btn.onclick = () => {
-            const g = loadGoals();
-            g.selectedMetric = btn.dataset.metric;
-            saveGoals(g);
-            renderGoalsSectionAdvanced(allActivities);
-        };
-    });
-
-    // Sport tab listeners
+    // Sport selector listeners
     div.querySelectorAll('.goal-sport-btn').forEach(btn => {
         btn.onclick = () => {
             const g = loadGoals();
@@ -2929,59 +2898,75 @@ export function renderGoalsSectionAdvanced(allActivities) {
         };
     });
 
-    // Event listeners
-    document.getElementById('update-annual-btn').onclick = () => {
-        const g = loadGoals();
-        const m = g.selectedMetric || 'km';
-        g[m] = g[m] || {};
-        g[m].annual = parseFloat(document.getElementById('annual-goal').value);
-        saveGoals(g);
-        renderGoalCharts(allActivities, g);
-    };
-
-    document.getElementById('update-monthly-btn').onclick = () => {
-        const g = loadGoals();
-        const m = g.selectedMetric || 'km';
-        g[m] = g[m] || {};
-        g[m].monthly = parseFloat(document.getElementById('monthly-goal').value);
-        saveGoals(g);
-        renderGoalCharts(allActivities, g);
-    };
-
     // Period selectors only change what is displayed, never the saved goals
-    document.getElementById('goal-annual-year').onchange = event => {
-        goalAnnualYear = Number(event.target.value);
+    document.getElementById('goal-year').onchange = event => {
+        goalYear = Number(event.target.value);
         renderGoalCharts(allActivities, loadGoals());
     };
-    document.getElementById('goal-monthly-month').onchange = event => {
-        goalMonthlyMonth = Number(event.target.value);
+    document.getElementById('goal-month').onchange = event => {
+        goalMonth = Number(event.target.value);
         renderGoalCharts(allActivities, loadGoals());
     };
-    document.getElementById('goal-monthly-year').onchange = event => {
-        goalMonthlyYear = Number(event.target.value);
-        renderGoalCharts(allActivities, loadGoals());
-    };
+
+    // Goal inputs: one annual and one monthly goal per metric, global across all periods
+    GOAL_METRICS.forEach(metric => {
+        ['annual', 'monthly'].forEach(kind => {
+            document.getElementById(`update-${kind}-btn-${metric}`).onclick = () => {
+                const g = loadGoals();
+                g[metric][kind] = parseFloat(document.getElementById(`${kind}-goal-${metric}`).value);
+                saveGoals(g);
+                renderGoalCharts(allActivities, loadGoals());
+            };
+        });
+    });
 
     renderGoalCharts(allActivities, goals);
 }
 
-function renderGoalCharts(allActivities, goals) {
-    const metric = goals.selectedMetric || 'km';
-    const sport = goals.selectedSport || 'all';
+function renderGoalPairHtml(metric, goals) {
     const cfg = metricConfig[metric];
-    const annualGoal = goals[metric]?.annual || 1000;
-    const monthlyGoal = goals[metric]?.monthly || 100;
-    const filteredActivities = filterActivitiesBySport(allActivities, sport);
+    const card = kind => `
+        <div style="flex:1;min-width:300px;background:white;padding:1.5rem;border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,0.1);">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;gap:0.5rem;flex-wrap:wrap;">
+                <h4 id="${kind}-title-${metric}" style="margin:0;"></h4>
+                <div>
+                    <input type="number" id="${kind}-goal-${metric}" value="${goals[metric][kind]}" min="1"
+                           style="width:100px;padding:0.5rem;border:1px solid #ddd;border-radius:4px;">
+                    <span style="margin-left:0.5rem;">${cfg.unit}</span>
+                    <button id="update-${kind}-btn-${metric}" style="margin-left:1rem;padding:0.5rem 1rem;background:#007bff;color:white;border:none;border-radius:4px;cursor:pointer;">
+                        Update
+                    </button>
+                </div>
+            </div>
+            <div id="${kind}-stats-${metric}" style="margin-bottom:1rem;padding:0.8rem;background:#f8f9fa;border-radius:4px;"></div>
+            <canvas id="${kind}-goal-chart-${metric}" style="max-height:300px;width:100%;"></canvas>
+        </div>`;
 
-    renderAnnualChart(filteredActivities, cfg, annualGoal, sport, goalAnnualYear);
-    renderMonthlyChart(filteredActivities, cfg, monthlyGoal, sport, goalMonthlyYear, goalMonthlyMonth);
+    return `
+    <h3 style="margin:1.5rem 0 0.75rem;">${cfg.label}</h3>
+    <div style="display:flex;gap:2rem;flex-wrap:wrap;margin-bottom:1rem;">
+        ${card('annual')}
+        ${card('monthly')}
+    </div>`;
+}
+
+function renderGoalCharts(allActivities, goals) {
+    const filteredActivities = filterActivitiesBySport(allActivities, goals.selectedSport);
+
+    GOAL_METRICS.forEach(metric => {
+        const cfg = metricConfig[metric];
+        document.getElementById(`annual-title-${metric}`).textContent = `Annual Goal - ${goalYear}`;
+        document.getElementById(`monthly-title-${metric}`).textContent = `Monthly Goal - ${getMonthName(goalMonth)} ${goalYear}`;
+        renderAnnualChart(filteredActivities, cfg, goals[metric].annual || DEFAULT_GOALS[metric].annual, goals.selectedSport, goalYear, metric);
+        renderMonthlyChart(filteredActivities, cfg, goals[metric].monthly || DEFAULT_GOALS[metric].monthly, goals.selectedSport, goalYear, goalMonth, metric);
+    });
 }
 
 // ==============================================
 // ANNUAL CHART
 // ==============================================
 
-function renderAnnualChart(allActivities, cfg, annualGoal, sport, year) {
+function renderAnnualChart(allActivities, cfg, annualGoal, sport, year, metric) {
     const sportLabel = GOAL_SPORTS.find(s => s.value === (sport || 'all'))?.label || 'All';
 
     const labels = [];
@@ -3012,7 +2997,7 @@ function renderAnnualChart(allActivities, cfg, annualGoal, sport, year) {
     const remaining = Math.max(0, annualGoal - currentTotal).toFixed(1);
 
     const annualOutcome = goalOutcomeBadge(currentTotal, annualGoal, new Date(year, 11, 31, 23, 59, 59));
-    document.getElementById('annual-stats').innerHTML = `
+    document.getElementById(`annual-stats-${metric}`).innerHTML = `
         <strong>Sport:</strong> ${sportLabel}
         | <strong>Progress:</strong> ${currentTotal.toFixed(1)} / ${annualGoal} ${cfg.unit} (${percentage}%)
         | <strong>Remaining:</strong> ${remaining} ${cfg.unit}
@@ -3067,14 +3052,14 @@ function renderAnnualChart(allActivities, cfg, annualGoal, sport, year) {
         }
     };
 
-    createDashboardChart('annual-goal-chart', config);
+    createDashboardChart(`annual-goal-chart-${metric}`, config);
 }
 
 // ==============================================
 // MONTHLY CHART
 // ==============================================
 
-function renderMonthlyChart(allActivities, cfg, monthlyGoal, sport, year, month) {
+function renderMonthlyChart(allActivities, cfg, monthlyGoal, sport, year, month, metric) {
     const sportLabel = GOAL_SPORTS.find(s => s.value === (sport || 'all'))?.label || 'All';
 
     const daysInMonth = new Date(year, month + 1, 0).getDate();
@@ -3106,7 +3091,7 @@ function renderMonthlyChart(allActivities, cfg, monthlyGoal, sport, year, month)
     const remaining = Math.max(0, monthlyGoal - currentTotal).toFixed(1);
 
     const monthlyOutcome = goalOutcomeBadge(currentTotal, monthlyGoal, new Date(year, month, daysInMonth, 23, 59, 59));
-    document.getElementById('monthly-stats').innerHTML = `
+    document.getElementById(`monthly-stats-${metric}`).innerHTML = `
         <strong>Sport:</strong> ${sportLabel}
         | <strong>Progress:</strong> ${currentTotal.toFixed(1)} / ${monthlyGoal} ${cfg.unit} (${percentage}%)
         | <strong>Remaining:</strong> ${remaining} ${cfg.unit}
@@ -3164,7 +3149,7 @@ function renderMonthlyChart(allActivities, cfg, monthlyGoal, sport, year, month)
         }
     };
 
-    createDashboardChart('monthly-goal-chart', config);
+    createDashboardChart(`monthly-goal-chart-${metric}`, config);
 }
 
 // ==============================================

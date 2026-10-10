@@ -1300,81 +1300,6 @@ function setupTSSUnitSelector() {
     });
 }
 
-/**
- * Setup chart click handlers for fullscreen modal
- */
-function setupChartClickHandlers() {
-    const chartContainers = document.querySelectorAll('.chart-container');
-    chartContainers.forEach(container => {
-        const canvas = container.querySelector('canvas');
-        const title = container.querySelector('h3');
-        if (canvas && !canvas.dataset.modalReady) {
-            canvas.dataset.modalReady = '1';
-            canvas.style.cursor = 'pointer';
-            canvas.addEventListener('click', () => {
-                openChartModal(canvas, title ? title.textContent : 'Chart');
-            });
-        }
-    });
-
-    // Add modal close listeners (only once)
-    const modal = document.getElementById('chart-modal');
-    if (modal && !modal.dataset.listenersReady) {
-        modal.dataset.listenersReady = '1';
-
-        // Close when clicking outside the content
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) {
-                closeChartModal();
-            }
-        });
-
-        // Close button
-        const closeBtn = modal.querySelector('.chart-modal-close');
-        if (closeBtn) {
-            closeBtn.onclick = closeChartModal;
-        }
-
-        // Keyboard escape
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && modal.classList.contains('active')) {
-                closeChartModal();
-            }
-        });
-    }
-}
-
-/**
- * Open chart in fullscreen modal
- */
-function openChartModal(canvas, title) {
-    const modal = document.getElementById('chart-modal');
-    const container = document.getElementById('chart-modal-canvas-container');
-    if (!modal || !container) return;
-
-    // Convert canvas to image for display in modal
-    const imageUrl = canvas.toDataURL('image/png');
-    container.innerHTML = `
-        <div style="display:flex;flex-direction:column;gap:1rem;width:100%;height:100%;">
-            <h2 style="margin:0;">${title}</h2>
-            <img src="${imageUrl}" style="width:100%;height:auto;max-height:calc(95vh - 60px);object-fit:contain;" />
-        </div>
-    `;
-
-    modal.classList.add('active');
-}
-
-/**
- * Close chart modal
- */
-function closeChartModal() {
-    const modal = document.getElementById('chart-modal');
-    if (modal) {
-        modal.classList.remove('active');
-        document.getElementById('chart-modal-canvas-container').innerHTML = '';
-    }
-}
-
 export function renderDashboardTab(allActivities, dateFilterFrom, dateFilterTo) {
     dashboardRenderContext = { allActivities, dateFilterFrom, dateFilterTo };
     const container = document.getElementById('dashboard-tab');
@@ -1508,7 +1433,6 @@ function renderDashboardContent(allActivities, dateFilterFrom, dateFilterTo) {
         renderTSSBarChart(recentActivities, selectedRangeDays);
         setupTSSUnitSelector();
         renderGoalsSectionAdvanced(allActivities);
-        setupChartClickHandlers();
     });
 }
 

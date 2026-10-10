@@ -211,21 +211,12 @@
 
                     <div class="charts-grid">
                         <div class="chart-container">
-                            <h3>Activities by Type</h3>
-                            <canvas id="activity-type-barchart"></canvas>
-                        </div>
-
-                        <div class="chart-container">
                             <h3>Monthly Distance</h3>
                             <canvas id="monthly-distance-chart"></canvas>
                         </div>
                         <div class="chart-container">
                             <h3>Pace vs. Distance</h3>
                             <canvas id="pace-vs-distance-chart"></canvas>
-                        </div>
-                        <div class="chart-container">
-                            <h3>Distance vs Elevation Gain</h3>
-                            <canvas id="distance-vs-elevation-chart"></canvas>
                         </div>
                         <div class="chart-container">
                             <h3>Distance Distribution</h3>
@@ -235,24 +226,12 @@
                             <h3>Pace Distribution</h3>
                             <canvas id="pace-histogram-chart"></canvas>
                         </div>
-                        <div class="chart-container">
-                            <h3>Elevation Distribution</h3>
-                            <canvas id="elevation-histogram"></canvas>
-                        </div>
                     </div>
 
                     <div class="charts-grid">
                         <div class="chart-container">
                             <h3>Pace–Heart Rate Curve</h3>
                             <canvas id="pace-hr-curve-chart"></canvas>
-                        </div>
-                        <div class="chart-container">
-                            <h3>Monthly Consistency vs Improvement</h3>
-                            <canvas id="consistency-improvement-chart"></canvas>
-                        </div>
-                        <div class="chart-container">
-                            <h3>Monthly Volume vs Improvement Probability</h3>
-                            <canvas id="volume-improvement-chart"></canvas>
                         </div>
                         <div class="chart-container">
                             <h3>Aerobic Efficiency Evolution</h3>
@@ -270,50 +249,15 @@
                     <div class="distance-section">
                         <div class="distance-controls">
                             <span class="distance-section-title">Distance Progression</span>
-                            <div class="rolling-selector-small">
-                                <label for="rolling-window-run">Rolling mean:</label>
-                                <select id="rolling-window-run">
-                                    <option value="4">1 month</option>
-                                    <option value="12">3 months</option>
-                                    <option value="26" selected>6 months</option>
-                                    <option value="52">1 year</option>
-                                </select>
-                            </div>
                         </div>
                         <div class="chart-row distance-pair">
                             <div class="chart-container">
                                 <h3>Accumulated Distance vs Time</h3>
                                 <canvas id="accumulated-distance-chart"></canvas>
                             </div>
-                            <div class="chart-container">
-                                <h3>Weekly Distance + Rolling Mean</h3>
-                                <canvas id="rolling-mean-distance-chart"></canvas>
-                            </div>
                         </div>
                     </div>
 
-
-                    <div class="eddington-section">
-                        <div class="eddington-controls">
-                            <span class="eddington-section-title">Eddington</span>
-                            <div class="eddington-mode-selector" id="run-eddington-mode-selector">
-                                <button class="eddington-mode-btn active" data-mode="daily">Daily</button>
-                                <button class="eddington-mode-btn" data-mode="weekly-1">Weekly ×1</button>
-                                <button class="eddington-mode-btn" data-mode="weekly-3">Weekly ×3 ★</button>
-                                <button class="eddington-mode-btn" data-mode="weekly-5">Weekly ×5</button>
-                            </div>
-                        </div>
-                        <div class="chart-row eddington-pair">
-                            <div class="chart-container">
-                                <h3>Eddington Distribution</h3>
-                                <canvas id="run-eddington-distribution-chart"></canvas>
-                            </div>
-                            <div class="chart-container">
-                                <h3>Eddington Progression</h3>
-                                <canvas id="run-eddington-progression-chart"></canvas>
-                            </div>
-                        </div>
-                    </div>
 
                     <div id="run-top"></div>
 

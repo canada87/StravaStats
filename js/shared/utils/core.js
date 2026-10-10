@@ -13,6 +13,42 @@ export function filterActivitiesByDate(activities, from, to) {
     });
 }
 
+/**
+ * Period shown by the Run/Bike consistency calendar grids, following the date filter:
+ * - no filter: the current year (Jan-Dec);
+ * - filter (a year button or a manual range): from/to of the filter. A missing end means
+ *   today, a missing start means 12 months before the end.
+ * The grid is never longer than 12 months: a longer range shows its last 12 months
+ * (`truncated` is true so the caller can say so).
+ */
+export function getConsistencyGridPeriod(dateFilterFrom, dateFilterTo, today = new Date()) {
+    const parseIso = iso => {
+        const [year, month, day] = iso.split('-').map(Number);
+        return new Date(year, month - 1, day);
+    };
+
+    if (!dateFilterFrom && !dateFilterTo) {
+        return {
+            periodStart: new Date(today.getFullYear(), 0, 1),
+            periodEnd: new Date(today.getFullYear(), 11, 31),
+            truncated: false
+        };
+    }
+
+    const periodEnd = dateFilterTo ? parseIso(dateFilterTo) : new Date(today);
+    let periodStart = dateFilterFrom
+        ? parseIso(dateFilterFrom)
+        : new Date(periodEnd.getFullYear(), periodEnd.getMonth() - 11, 1);
+
+    const months = (periodEnd.getFullYear() - periodStart.getFullYear()) * 12 + (periodEnd.getMonth() - periodStart.getMonth()) + 1;
+    const truncated = months > 12;
+    if (truncated) {
+        periodStart = new Date(periodEnd.getFullYear(), periodEnd.getMonth() - 11, 1);
+    }
+
+    return { periodStart, periodEnd, truncated };
+}
+
 export function rollingMean(arr, windowSize) {
     const result = [];
     for (let i = 0; i < arr.length; i++) {

@@ -955,22 +955,23 @@ export function renderConsistencyChart(rides, dateFilterFrom = null, dateFilterT
 
     const cal = new CalHeatmap();
     const today = new Date();
-    const hasManualFilters = Boolean(dateFilterFrom || dateFilterTo);
-    const periodStart = hasManualFilters
-        ? new Date(today.getFullYear(), today.getMonth(), today.getDate() - 364)
-        : new Date(today.getFullYear(), 0, 1);
-    const periodEnd = hasManualFilters
-        ? today
-        : new Date(today.getFullYear(), 11, 31);
+
+    // The grid follows the date filter (year button / manual range), not "the last 365 days"
+    const { periodStart, periodEnd, truncated } = utils.getConsistencyGridPeriod(dateFilterFrom, dateFilterTo, today);
 
     const dayOfWeek = periodStart.getDay();
     const daysUntilMonday = dayOfWeek === 0 ? 1 : (8 - dayOfWeek) % 7;
     const firstMonday = new Date(periodStart);
     firstMonday.setDate(periodStart.getDate() + daysUntilMonday);
+    firstMonday.setHours(12, 0, 0, 0); // midday: local midnight on the 1st would fall in the previous month in UTC
 
-    const monthRange = hasManualFilters
-        ? ((periodEnd.getFullYear() - firstMonday.getFullYear()) * 12 + (periodEnd.getMonth() - firstMonday.getMonth()) + 1)
-        : 12;
+    const monthRange = (periodEnd.getFullYear() - firstMonday.getFullYear()) * 12 + (periodEnd.getMonth() - firstMonday.getMonth()) + 1;
+
+    container.parentElement?.querySelectorAll('.consistency-grid-note').forEach(el => el.remove());
+    if (truncated) {
+        container.insertAdjacentHTML('afterend',
+            '<p class="consistency-grid-note" style="text-align:center;color:#8c8c8c;font-size:0.85em;margin:0.5rem 0 0;">Showing the last 12 months of the selected range.</p>');
+    }
 
     const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 

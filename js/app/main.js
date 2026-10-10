@@ -65,13 +65,12 @@ document.addEventListener('DOMContentLoaded', () => {
     let trendsDataType = 'time';
     let runGearFilter = 'all';
     let bikeGearFilter = 'all';
-    let runRollingWindow = 26; // default 6 months (26 weeks)
     let bikeRollingWindow = 26;
 
     // --- Tab rendering config: maps tab id → { render function, uses date filters } ---
     const tabConfig = {
         'dashboard-tab': { render: () => renderDashboardTab(allActivities, dateFilterFrom, dateFilterTo), usesFilters: true },
-        'run-tab': { render: () => renderRunAnalysisTab(allActivities, dateFilterFrom, dateFilterTo, runGearFilter, runRollingWindow), usesFilters: true },
+        'run-tab': { render: () => renderRunAnalysisTab(allActivities, dateFilterFrom, dateFilterTo, runGearFilter), usesFilters: true },
         'bike-tab': { render: () => renderBikeAnalysisTab(allActivities, dateFilterFrom, dateFilterTo, bikeGearFilter, bikeRollingWindow), usesFilters: true },
         'trends-tab': { render: () => renderTrendsTab(allActivities, dateFilterFrom, dateFilterTo, trendsSportFilter, trendsDataType), usesFilters: true },
         'planner-tab': { render: () => renderPlannerTab(allActivities) },
@@ -445,7 +444,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     runGearFilter = runGearFilterEl?.value || runGearFilter || 'all';
                     saveFilterState();
 
-                    renderRunAnalysisTab(allActivities, dateFilterFrom, dateFilterTo, runGearFilter, runRollingWindow);
+                    renderRunAnalysisTab(allActivities, dateFilterFrom, dateFilterTo, runGearFilter);
                 });
             });
         }
@@ -596,7 +595,7 @@ document.addEventListener('DOMContentLoaded', () => {
             setupDashboard(allActivities);
             loadFilterState();
             populateGearFilters();
-            renderRunAnalysisTab(allActivities, dateFilterFrom, dateFilterTo, runGearFilter, runRollingWindow);
+            renderRunAnalysisTab(allActivities, dateFilterFrom, dateFilterTo, runGearFilter);
             renderedTabs.add('run-tab');
             setupYearlySelector();
 
@@ -643,7 +642,7 @@ document.addEventListener('DOMContentLoaded', () => {
             renderedTabs.clear();
             loadFilterState();
             populateGearFilters();
-            renderRunAnalysisTab(allActivities, dateFilterFrom, dateFilterTo, runGearFilter, runRollingWindow);
+            renderRunAnalysisTab(allActivities, dateFilterFrom, dateFilterTo, runGearFilter);
             renderedTabs.add('run-tab');
             setupYearlySelector();
             activateTab(getTabIdFromPath(window.location.pathname));
@@ -749,7 +748,7 @@ document.addEventListener('DOMContentLoaded', () => {
             dateFilterTo = dateToEl?.value || null;
             runGearFilter = runGearFilterEl?.value || 'all';
             saveFilterState();
-            renderRunAnalysisTab(allActivities, dateFilterFrom, dateFilterTo, runGearFilter, runRollingWindow);
+            renderRunAnalysisTab(allActivities, dateFilterFrom, dateFilterTo, runGearFilter);
         });
     }
 
@@ -763,7 +762,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (runGearFilterEl) runGearFilterEl.value = 'all';
             document.querySelectorAll('#year-filter-buttons .year-btn').forEach(b => b.classList.remove('active'));
             saveFilterState();
-            renderRunAnalysisTab(allActivities, dateFilterFrom, dateFilterTo, runGearFilter, runRollingWindow);
+            renderRunAnalysisTab(allActivities, dateFilterFrom, dateFilterTo, runGearFilter);
         });
     }
 
@@ -771,17 +770,7 @@ document.addEventListener('DOMContentLoaded', () => {
         runGearFilterEl.addEventListener('change', () => {
             runGearFilter = runGearFilterEl.value || 'all';
             saveFilterState();
-            renderRunAnalysisTab(allActivities, dateFilterFrom, dateFilterTo, runGearFilter, runRollingWindow);
-        });
-    }
-
-    // Rolling mean window selector for Run Tab
-    const runRollingWindowEl = document.getElementById('rolling-window-run');
-    if (runRollingWindowEl) {
-        runRollingWindow = parseInt(runRollingWindowEl.value) || 26;
-        runRollingWindowEl.addEventListener('change', () => {
-            runRollingWindow = parseInt(runRollingWindowEl.value) || 26;
-            renderRunAnalysisTab(allActivities, dateFilterFrom, dateFilterTo, runGearFilter, runRollingWindow);
+            renderRunAnalysisTab(allActivities, dateFilterFrom, dateFilterTo, runGearFilter);
         });
     }
 

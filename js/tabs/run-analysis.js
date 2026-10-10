@@ -22,28 +22,22 @@ function calculateGlobalHrMaxRef(runs) {
     return hrMaxValues[index];
 }
 
-export function renderRunAnalysisTab(allActivities, dateFilterFrom, dateFilterTo, gearFilter = 'all', rollingWindowWeeks = 26) {
+export function renderRunAnalysisTab(allActivities, dateFilterFrom, dateFilterTo, gearFilter = 'all') {
     const filteredActivities = utils.filterActivitiesByDate(allActivities, dateFilterFrom, dateFilterTo);
     const runs = filteredActivities
         .filter(a => a.type && a.type.includes('Run'))
         .filter(a => gearFilter === 'all' || a.gear_id === gearFilter);
 
     renderSummaryCards(runs);
-    renderActivityTypeChart(runs);
     renderMonthlyDistanceChart(runs);
     renderPaceVsDistanceChart(runs);
     renderDistanceHistogram(runs);
-    renderDistanceSection(runs, rollingWindowWeeks);
-    renderEddingtonSection(runs);
-    renderDistanceVsElevationChart(runs);
-    renderElevationHistogram(runs);
+    renderDistanceSection(runs);
     renderConsistencyChart(runs, dateFilterFrom, dateFilterTo);
     renderTopRuns(runs);
     renderActivitiesTable(runs);
     renderPaceHistogram(runs);
     renderPaceHrCurveChart(runs);
-    renderConsistencyImprovementChart(runs);
-    renderVolumeImprovementChart(runs);
     renderEfficiencyEvolutionChart(runs);
     renderDistanceEfficiencyChart(runs);
     renderPaceHrEfficiencyChart(runs);
@@ -159,121 +153,6 @@ function createChart(canvasId, config) {
     return charts[canvasId];
 }
 
-function isDatasetVisible(chart, datasetIndex) {
-    const meta = chart.getDatasetMeta(datasetIndex);
-    const dataset = chart.data.datasets[datasetIndex];
-    if (typeof chart.isDatasetVisible === 'function') {
-        return chart.isDatasetVisible(datasetIndex);
-    }
-    return !(meta.hidden === null ? dataset.hidden : meta.hidden);
-}
-
-function toggleDatasetVisibility(chart, datasetIndex) {
-    const meta = chart.getDatasetMeta(datasetIndex);
-    meta.hidden = isDatasetVisible(chart, datasetIndex);
-    chart.update();
-}
-
-function getRollingTrendLegendPriority(label) {
-    if (label.startsWith('Rolling mean (')) return 0;
-    if (label === 'Weekly distance (km)') return 1;
-    if (label === 'Rolling mean pace (min/km)') return 2;
-    return 99;
-}
-
-function getLegendColorValue(value, fallback) {
-    if (Array.isArray(value)) return value[0] || fallback;
-    return value || fallback;
-}
-
-function syncChartHtmlLegendOverlay(chart, canvasId) {
-    const canvas = document.getElementById(canvasId);
-    const container = canvas?.closest('.chart-container');
-    if (!canvas || !container || !chart) return;
-
-    const canvasRect = canvas.getBoundingClientRect();
-    if (canvasRect.width === 0 || canvasRect.height === 0) return;
-
-    container.style.position = 'relative';
-
-    let overlay = container.querySelector(`.chart-html-legend-overlay[data-chart-legend-for="${canvasId}"]`);
-    if (!overlay) {
-        overlay = document.createElement('div');
-        overlay.className = 'chart-html-legend-overlay';
-        overlay.dataset.chartLegendFor = canvasId;
-        container.appendChild(overlay);
-    }
-
-    const containerRect = container.getBoundingClientRect();
-    overlay.style.left = `${canvasRect.left - containerRect.left}px`;
-    overlay.style.top = `${canvasRect.bottom - containerRect.top - 28}px`;
-    overlay.style.width = `${canvasRect.width}px`;
-    overlay.style.height = '24px';
-
-    const legendItems = chart.data.datasets
-        .map((dataset, datasetIndex) => ({ dataset, datasetIndex }))
-        .sort((a, b) => getRollingTrendLegendPriority(a.dataset.label) - getRollingTrendLegendPriority(b.dataset.label));
-
-    const legendSignature = legendItems
-        .map(({ dataset, datasetIndex }) => {
-            const borderColor = getLegendColorValue(dataset.borderColor, '#777');
-            const backgroundColor = getLegendColorValue(dataset.backgroundColor, borderColor);
-            return [datasetIndex, dataset.label, borderColor, backgroundColor].join(':');
-        })
-        .join('|');
-
-    if (overlay.dataset.legendSignature !== legendSignature) {
-        overlay.innerHTML = '';
-        overlay.dataset.legendSignature = legendSignature;
-
-        legendItems.forEach(({ dataset, datasetIndex }) => {
-            const borderColor = getLegendColorValue(dataset.borderColor, '#777');
-            const backgroundColor = getLegendColorValue(dataset.backgroundColor, borderColor);
-
-            const button = document.createElement('button');
-            button.type = 'button';
-            button.className = 'chart-html-legend-overlay__item';
-            button.dataset.datasetIndex = String(datasetIndex);
-
-            const swatch = document.createElement('span');
-            swatch.className = 'chart-html-legend-overlay__swatch';
-            swatch.style.backgroundColor = backgroundColor;
-            swatch.style.borderColor = borderColor;
-
-            const label = document.createElement('span');
-            label.textContent = dataset.label;
-
-            button.append(swatch, label);
-            button.addEventListener('click', event => {
-                event.preventDefault();
-                event.stopPropagation();
-                const currentChart = Chart.getChart(canvas) || chart;
-                toggleDatasetVisibility(currentChart, datasetIndex);
-            });
-
-            overlay.appendChild(button);
-        });
-    }
-
-    legendItems.forEach(({ datasetIndex }) => {
-        const button = overlay.querySelector(`[data-dataset-index="${datasetIndex}"]`);
-        if (!button) return;
-        const visible = isDatasetVisible(chart, datasetIndex);
-        button.classList.toggle('is-hidden', !visible);
-        button.setAttribute('aria-pressed', visible ? 'true' : 'false');
-    });
-}
-
-function createHtmlLegendOverlayPlugin(canvasId) {
-    return {
-        id: `${canvasId}-html-legend-overlay`,
-        afterDraw(chart) {
-            syncChartHtmlLegendOverlay(chart, canvasId);
-        }
-    };
-}
-
-
 // --- CHART RENDERING FUNCTIONS ---
 export function renderConsistencyChart(runs, dateFilterFrom = null, dateFilterTo = null) {
     const container = document.getElementById('cal-heatmap-run');
@@ -324,24 +203,23 @@ export function renderConsistencyChart(runs, dateFilterFrom = null, dateFilterTo
 
     const cal = new CalHeatmap();
     const today = new Date();
-    const hasManualFilters = Boolean(dateFilterFrom || dateFilterTo);
 
-    // Default: full current year (Jan-Dec). With filters: rolling last 365 days.
-    const periodStart = hasManualFilters
-        ? new Date(today.getFullYear(), today.getMonth(), today.getDate() - 364)
-        : new Date(today.getFullYear(), 0, 1);
-    const periodEnd = hasManualFilters
-        ? today
-        : new Date(today.getFullYear(), 11, 31);
+    // The grid follows the date filter (year button / manual range), not "the last 365 days"
+    const { periodStart, periodEnd, truncated } = utils.getConsistencyGridPeriod(dateFilterFrom, dateFilterTo, today);
 
     const dayOfWeek = periodStart.getDay();
     const daysUntilMonday = dayOfWeek === 0 ? 1 : (8 - dayOfWeek) % 7;
     const firstMonday = new Date(periodStart);
     firstMonday.setDate(periodStart.getDate() + daysUntilMonday);
+    firstMonday.setHours(12, 0, 0, 0); // midday: local midnight on the 1st would fall in the previous month in UTC
 
-    const monthRange = hasManualFilters
-        ? ((periodEnd.getFullYear() - firstMonday.getFullYear()) * 12 + (periodEnd.getMonth() - firstMonday.getMonth()) + 1)
-        : 12;
+    const monthRange = (periodEnd.getFullYear() - firstMonday.getFullYear()) * 12 + (periodEnd.getMonth() - firstMonday.getMonth()) + 1;
+
+    container.parentElement?.querySelectorAll('.consistency-grid-note').forEach(el => el.remove());
+    if (truncated) {
+        container.insertAdjacentHTML('afterend',
+            '<p class="consistency-grid-note" style="text-align:center;color:#8c8c8c;font-size:0.85em;margin:0.5rem 0 0;">Showing the last 12 months of the selected range.</p>');
+    }
 
     const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
@@ -449,65 +327,6 @@ export function renderConsistencyChart(runs, dateFilterFrom = null, dateFilterTo
 
 
 
-
-
-export function renderActivityTypeChart(runs) {
-    if (!runs || runs.length === 0) return;
-
-    const p80Distance = [...runs].map(a => a.distance)
-        .sort((a, b) => a - b)[Math.floor(0.8 * runs.length)];
-
-    const avg_tss = runs.reduce((sum, a) => sum + (a.tss || 0), 0) / runs.length;
-
-    // Clasificación de cada actividad.
-    runs.forEach(a => {
-        if (a.sport_type === 'TrailRun') {
-            a.workout_type_classified = 'Trail Run';
-        } else if (a.workout_type !== 1 && a.distance >= p80Distance) {
-            a.workout_type_classified = 'Long Run';
-        } else if (a.workout_type === 1) {
-            a.workout_type_classified = 'Race';
-        }
-        else if (a.tss && a.tss >= avg_tss * 1.5) {
-            a.workout_type_classified = 'High intensity Run';
-        }
-        else if (a.tss && a.tss >= avg_tss * 0.5) {
-            a.workout_type_classified = 'Moderate intensity Run';
-        }
-        else if (a.tss && a.tss < avg_tss * 0.5) {
-            a.workout_type_classified = 'Low intensity Run';
-        }
-        else {
-            a.workout_type_classified = 'Other';
-        }
-    });
-
-    // Contar por categoría
-    const workoutTypeCounts = {};
-    runs.forEach(a => {
-        const key = a.workout_type_classified;
-        workoutTypeCounts[key] = (workoutTypeCounts[key] || 0) + 1;
-    });
-
-    const workoutTypeLabels = Object.keys(workoutTypeCounts);
-    const workoutTypeData = workoutTypeLabels.map(label => workoutTypeCounts[label]);
-
-    createChart('activity-type-barchart', {
-        type: 'bar',
-        data: {
-            labels: workoutTypeLabels,
-            datasets: [{
-                label: '# Activities',
-                data: workoutTypeData,
-                backgroundColor: 'rgba(252, 82, 0, 0.7)'
-            }]
-        },
-        options: {
-            indexAxis: 'y',
-            plugins: { legend: { display: false } }
-        }
-    });
-}
 
 
 export function renderMonthlyDistanceChart(runs) {
@@ -816,72 +635,6 @@ export async function renderGearGanttChart(runs) {
 }
 
 
-export function renderDistanceVsElevationChart(runs) {
-    // Separate data for trail and non-trail runs
-    const trailData = [];
-    const roadData = [];
-    runs.forEach(r => {
-        const point = {
-            x: r.distance / 1000,
-            y: r.total_elevation_gain || 0
-        };
-        if (r.sport_type === 'TrailRun') {
-            trailData.push(point);
-        } else {
-            roadData.push(point);
-        }
-    });
-
-    createChart('distance-vs-elevation-chart', {
-        type: 'scatter',
-        data: {
-            datasets: [
-                {
-                    label: 'Trail Run',
-                    data: trailData,
-                    backgroundColor: 'rgba(174, 59, 2, 0.87)'
-                },
-                {
-                    label: 'Run',
-                    data: roadData,
-                    backgroundColor: 'rgba(245, 131, 0, 0.78)'
-                }
-            ]
-        },
-        options: {
-            scales: {
-                x: { title: { display: true, text: 'Distance (km)' } },
-                y: { title: { display: true, text: 'Elevation Gain (m)' } }
-            }
-        }
-    });
-}
-
-export function renderElevationHistogram(runs) {
-    const values = runs.map(r => r.total_elevation_gain || 0);
-    const binSize = 10;
-    const maxVal = Math.max(...values, 0);
-    const binCount = Math.ceil(maxVal / binSize);
-    const bins = Array(binCount).fill(0);
-    values.forEach(v => {
-        const idx = Math.floor(v / binSize);
-        if (idx < binCount) bins[idx]++;
-    });
-
-    createChart('elevation-histogram', {
-        type: 'bar',
-        data: {
-            labels: bins.map((_, i) => `${i * binSize}-${(i + 1) * binSize}`),
-            datasets: [{
-                label: '# Activities',
-                data: bins,
-                backgroundColor: 'rgba(252, 82, 0, 0.5)'
-            }]
-        },
-        options: { scales: { x: { title: { display: true, text: 'Elevation Gain (m)' } } } }
-    });
-}
-
 export function renderAccumulatedDistanceChart(runs) {
     if (!runs || runs.length === 0) return;
 
@@ -932,480 +685,9 @@ export function renderAccumulatedDistanceChart(runs) {
     });
 }
 
-export function renderRollingMeanDistanceChart(runs, rollingWindowWeeks = 26) {
-    if (!runs || runs.length === 0) return;
-
-    const weeklyData = runs.reduce((acc, run) => {
-        const date = new Date(run.start_date_local);
-        const weekStart = new Date(date);
-        weekStart.setDate(date.getDate() - date.getDay() + 1); // Monday
-        const weekKey = weekStart.toISOString().slice(0, 10);
-        if (!acc[weekKey]) acc[weekKey] = { distance: 0, time: 0 };
-        acc[weekKey].distance += (run.distance || 0) / 1000;
-        acc[weekKey].time += run.moving_time || 0;
-        return acc;
-    }, {});
-    const labels = Object.keys(weeklyData).sort();
-    const weeklyKm = labels.map(k => weeklyData[k].distance);
-    const weeklyPace = labels.map(k => {
-        const d = weeklyData[k];
-        return d.distance > 0 ? (d.time / 60) / d.distance : 0;
-    });
-    const rolling = utils.rollingMean(weeklyKm, rollingWindowWeeks).map(v => +v.toFixed(2));
-    const rollingPace = utils.rollingMean(weeklyPace, rollingWindowWeeks).map(v => +v.toFixed(2));
-
-    // Convert weeks to human-readable label
-    const windowLabel = rollingWindowWeeks >= 52 ? '1 year'
-        : rollingWindowWeeks >= 26 ? '6 months'
-            : rollingWindowWeeks >= 12 ? '3 months'
-                : '1 month';
-
-    createChart('rolling-mean-distance-chart', {
-        type: 'line',
-        data: {
-            labels,
-            datasets: [
-                {
-                    label: 'Weekly distance (km)',
-                    data: weeklyKm,
-                    type: 'bar',
-                    yAxisID: 'y',
-                    backgroundColor: 'rgba(252, 82, 0, 0.20)',
-                    borderColor: 'rgba(252, 82, 0, 0.35)',
-                    borderWidth: 1,
-                    hidden: true,
-                    order: 2
-                },
-                {
-                    label: `Rolling mean (${windowLabel})`,
-                    data: rolling,
-                    type: 'line',
-                    yAxisID: 'y',
-                    borderColor: '#FC5200',
-                    backgroundColor: 'rgba(252, 82, 0, 0.18)',
-                    pointRadius: 0,
-                    borderWidth: 4,
-                    tension: 0.25,
-                    order: 1
-                },
-                {
-                    label: 'Rolling mean pace (min/km)',
-                    data: rollingPace,
-                    type: 'line',
-                    yAxisID: 'yPace',
-                    borderColor: '#1976d2',
-                    backgroundColor: 'rgba(25,118,210,0.18)',
-                    pointRadius: 0,
-                    borderWidth: 4,
-                    tension: 0.25,
-                    order: 1,
-                    hidden: true
-                }
-            ]
-        },
-        plugins: [createHtmlLegendOverlayPlugin('rolling-mean-distance-chart')],
-        options: {
-            layout: {
-                padding: { bottom: 28 }
-            },
-            plugins: {
-                legend: {
-                    display: false
-                }
-            },
-            scales: {
-                x: { title: { display: true } },
-                y: { title: { display: true, text: 'Distance (km)' } },
-                yPace: {
-                    display: 'auto',
-                    position: 'right',
-                    reverse: true,
-                    title: { display: true, text: 'Pace (min/km)' },
-                    grid: { drawOnChartArea: false }
-                }
-            }
-        }
-    });
-
-    utils.upsertChartInfo('rolling-mean-distance-chart', {
-        title: 'Weekly trend, in short',
-        bodyHtml: `Bars are the weekly totals and the solid line is the rolling mean over the selected window.<br>
-           Longer windows smooth more noise; shorter windows react faster to changes.`,
-        accentColor: '#FC5200'
-    });
-}
-
-function getRunMilestoneLabels() {
-    return new Map([
-        [5, '5K E5'],
-        [10, '10K E10'],
-        [15, '15K E15'],
-        [20, '20K E20'],
-        [21, 'Half-marathon E21'],
-        [30, '30K E30'],
-        [42, 'Marathon E42'],
-        [50, '50K E50'],
-        [100, 'Ultra E100']
-    ]);
-}
-
-function attachRunEddingtonInfo(canvasId, eddington, variant) {
-    const current = eddington.summary.current;
-    const recentWindow = eddington.summary.recentWindowDays;
-    const projectionCount = eddington.summary.projectionCount;
-    const milestoneNote = current >= 42
-        ? 'The marathon marker appears because E42 has been reached.'
-        : 'A marathon marker only appears once E42 is reached: 42 different days of at least 42 km.';
-
-    let bodyHtml;
-    if (variant === 'weekly') {
-        const multiplier = attachRunEddingtonInfo._multiplier || 3;
-        bodyHtml = `Current value: <strong>E${current}</strong> weekly (×${multiplier}).<br>
-           E${current} means <strong>${current} different weeks</strong> with at least
-           <strong>${current * multiplier} km</strong> total each week.<br>
-           The dashed line projects the next <strong>${projectionCount}</strong> E values
-           using your last <strong>${recentWindow}</strong> days of activity.`;
-    } else if (variant === 'distribution') {
-        bodyHtml = `Current value: <strong>E${current}</strong>.<br>
-           The bars show how many different days were at least that distance.<br>
-              The solid line shows how many <strong>active days</strong> it took to reach each E value.<br>
-              The dashed continuation projects only the next <strong>${projectionCount}</strong> E values, using your last <strong>${recentWindow}</strong> days of activity.<br>
-           ${milestoneNote}`;
-    } else {
-        bodyHtml = `Current value: <strong>E${current}</strong>.<br>
-           Each step marks the first date on which that exact E value was achieved.<br>
-           Special markers are not single activities. They only appear when the matching E value is reached.<br>
-           Example: one marathon day does <strong>not</strong> mean Marathon E42.`;
-    }
-
-    utils.upsertChartInfo(canvasId, {
-        title: 'Eddington, in short',
-        bodyHtml,
-        accentColor: '#FC5200'
-    });
-}
-
-export function renderEddingtonDistributionChart(runs) {
-    if (!runs || runs.length === 0) return;
-
-    const eddington = utils.buildEddingtonSeries(runs, run => (run.distance || 0) / 1000, { unitStep: 1 });
-    if (!eddington.distributionSeries.length) return;
-
-    createChart('run-eddington-distribution-chart', {
-        type: 'bar',
-        data: {
-            labels: eddington.distributionSeries.map(point => String(point.threshold)),
-            datasets: [
-                {
-                    label: 'Days >= E km',
-                    data: eddington.distributionSeries.map(point => point.qualifyingDays),
-                    backgroundColor: 'rgba(252, 82, 0, 0.65)',
-                    borderColor: '#FC5200',
-                    borderWidth: 1,
-                    yAxisID: 'y'
-                },
-                {
-                    label: 'Days needed',
-                    data: eddington.distributionSeries.map(point => point.activeDaysNeeded),
-                    type: 'line',
-                    borderColor: '#7c2d12',
-                    backgroundColor: 'rgba(124, 45, 18, 0.18)',
-                    spanGaps: true,
-                    tension: 0.25,
-                    pointRadius: 2,
-                    pointHoverRadius: 4,
-                    yAxisID: 'y1'
-                },
-                {
-                    label: 'Projected days needed',
-                    data: eddington.distributionSeries.map(point => point.projectedActiveDaysNeeded),
-                    type: 'line',
-                    borderColor: '#7c2d12',
-                    backgroundColor: 'transparent',
-                    borderDash: [6, 6],
-                    spanGaps: true,
-                    tension: 0.2,
-                    pointRadius: 0,
-                    pointHoverRadius: 4,
-                    yAxisID: 'y1'
-                }
-            ]
-        },
-        options: {
-            plugins: {
-                legend: { position: 'bottom' },
-                tooltip: {
-                    callbacks: {
-                        label(context) {
-                            const point = eddington.distributionSeries[context.dataIndex];
-                            if (context.datasetIndex === 0) {
-                                return `${point.qualifyingDays} days at ${point.threshold} km or more`;
-                            }
-                            if (context.datasetIndex === 1 && point.activeDaysNeeded == null) {
-                                return `E${point.threshold} not reached yet`;
-                            }
-                            if (context.datasetIndex === 1) {
-                                return `${point.activeDaysNeeded} active days to reach E${point.threshold} (${point.daysNeeded} calendar days)`;
-                            }
-                            if (point.projectedActiveDaysNeeded == null) {
-                                return `No projection for E${point.threshold} yet`;
-                            }
-                            return `Projection: about ${point.projectedActiveDaysNeeded} active days to reach E${point.threshold}`;
-                        }
-                    }
-                }
-            },
-            scales: {
-                x: { title: { display: true, text: 'Eddington number (km)' } },
-                y: {
-                    type: 'linear',
-                    position: 'left',
-                    beginAtZero: true,
-                    title: { display: true, text: 'Qualifying days' }
-                },
-                y1: {
-                    type: 'linear',
-                    position: 'right',
-                    beginAtZero: true,
-                    title: { display: true, text: 'Active days needed' },
-                    grid: { drawOnChartArea: false }
-                }
-            }
-        }
-    });
-
-    attachRunEddingtonInfo('run-eddington-distribution-chart', eddington, 'distribution');
-}
-
-export function renderEddingtonProgressionChart(runs) {
-    if (!runs || runs.length === 0) return;
-
-    const eddington = utils.buildEddingtonSeries(runs, run => (run.distance || 0) / 1000, { unitStep: 1 });
-    if (!eddington.achievementSeries.length) return;
-
-    const milestoneLabels = getRunMilestoneLabels();
-    const milestoneData = eddington.achievementSeries
-        .filter(point => milestoneLabels.has(point.threshold))
-        .map(point => ({ x: point.date, y: point.threshold, label: milestoneLabels.get(point.threshold) }));
-
-    createChart('run-eddington-progression-chart', {
-        type: 'line',
-        data: {
-            labels: eddington.achievementSeries.map(point => point.date),
-            datasets: [
-                {
-                    label: 'Eddington reached',
-                    data: eddington.achievementSeries.map(point => point.threshold),
-                    borderColor: '#FC5200',
-                    backgroundColor: 'rgba(252, 82, 0, 0.18)',
-                    pointRadius: 2,
-                    pointHoverRadius: 4,
-                    tension: 0.15,
-                    fill: false
-                },
-                {
-                    label: 'Milestones',
-                    type: 'scatter',
-                    data: milestoneData,
-                    borderColor: '#7c2d12',
-                    backgroundColor: '#7c2d12',
-                    pointRadius: 5,
-                    pointHoverRadius: 7,
-                    pointStyle: 'rectRot',
-                    showLine: false
-                }
-            ]
-        },
-        options: {
-            plugins: {
-                legend: { position: 'bottom' },
-                tooltip: {
-                    callbacks: {
-                        title(items) {
-                            return items[0]?.label || '';
-                        },
-                        label(context) {
-                            if (context.datasetIndex === 1) {
-                                return `${context.raw.label}. Reached when you had ${context.raw.y} days of at least ${context.raw.y} km.`;
-                            }
-                            return `Reached E${context.raw} on ${context.label}`;
-                        }
-                    }
-                }
-            },
-            scales: {
-                x: { title: { display: true, text: 'Achievement date' } },
-                y: {
-                    beginAtZero: true,
-                    title: { display: true, text: 'Eddington number (km)' }
-                }
-            }
-        }
-    });
-
-    attachRunEddingtonInfo('run-eddington-progression-chart', eddington, 'progression');
-}
-
-function _drawRunEddingtonCharts(runs, mode) {
-    const distId = 'run-eddington-distribution-chart';
-    const progId = 'run-eddington-progression-chart';
-    const isWeekly = mode !== 'daily';
-    const multiplier = isWeekly ? parseInt(mode.split('-')[1]) : 1;
-    const unit = isWeekly ? 'weeks' : 'days';
-
-    let eddington;
-    if (isWeekly) {
-        const weekly = utils.aggregateByWeek(runs, r => (r.distance || 0) / 1000);
-        const pseudo = weekly.map(w => ({
-            start_date_local: w.start_date_local,
-            distance: (w.total / multiplier) * 1000
-        }));
-        eddington = utils.buildEddingtonSeries(pseudo, a => a.distance / 1000, { unitStep: 1 });
-    } else {
-        eddington = utils.buildEddingtonSeries(runs, r => (r.distance || 0) / 1000, { unitStep: 1 });
-    }
-
-    if (eddington.distributionSeries.length) {
-        createChart(distId, {
-            type: 'bar',
-            data: {
-                labels: eddington.distributionSeries.map(p => String(p.threshold)),
-                datasets: [
-                    {
-                        label: isWeekly ? `Weeks ≥ E×${multiplier} km` : 'Days >= E km',
-                        data: eddington.distributionSeries.map(p => p.qualifyingDays),
-                        backgroundColor: 'rgba(252, 82, 0, 0.65)',
-                        borderColor: '#FC5200',
-                        borderWidth: 1,
-                        yAxisID: 'y'
-                    },
-                    {
-                        label: isWeekly ? 'Weeks needed' : 'Days needed',
-                        data: eddington.distributionSeries.map(p => p.activeDaysNeeded),
-                        type: 'line',
-                        borderColor: '#7c2d12',
-                        backgroundColor: 'rgba(124, 45, 18, 0.18)',
-                        spanGaps: true, tension: 0.25, pointRadius: 2, pointHoverRadius: 4,
-                        yAxisID: 'y1'
-                    },
-                    {
-                        label: isWeekly ? 'Projected weeks needed' : 'Projected days needed',
-                        data: eddington.distributionSeries.map(p => p.projectedActiveDaysNeeded),
-                        type: 'line',
-                        borderColor: '#7c2d12', backgroundColor: 'transparent',
-                        borderDash: [6, 6], spanGaps: true, tension: 0.2,
-                        pointRadius: 0, pointHoverRadius: 4,
-                        yAxisID: 'y1'
-                    }
-                ]
-            },
-            options: {
-                plugins: {
-                    legend: { position: 'bottom' },
-                    tooltip: {
-                        callbacks: {
-                            label(context) {
-                                const p = eddington.distributionSeries[context.dataIndex];
-                                if (context.datasetIndex === 0) {
-                                    return isWeekly
-                                        ? `${p.qualifyingDays} weeks with ≥ ${(p.threshold * multiplier).toFixed(0)} km total`
-                                        : `${p.qualifyingDays} days at ${p.threshold} km or more`;
-                                }
-                                if (context.datasetIndex === 1 && p.activeDaysNeeded == null) return `E${p.threshold} not reached yet`;
-                                if (context.datasetIndex === 1) return `${p.activeDaysNeeded} active ${unit} to reach E${p.threshold} (${p.daysNeeded} calendar days)`;
-                                if (p.projectedActiveDaysNeeded == null) return `No projection for E${p.threshold} yet`;
-                                return `Projection: about ${p.projectedActiveDaysNeeded} active ${unit} to reach E${p.threshold}`;
-                            }
-                        }
-                    }
-                },
-                scales: {
-                    x: { title: { display: true, text: isWeekly ? `Weekly Eddington (×${multiplier}, km/week)` : 'Eddington number (km)' } },
-                    y: { type: 'linear', position: 'left', beginAtZero: true, title: { display: true, text: isWeekly ? 'Qualifying weeks' : 'Qualifying days' } },
-                    y1: { type: 'linear', position: 'right', beginAtZero: true, title: { display: true, text: isWeekly ? 'Active weeks needed' : 'Active days needed' }, grid: { drawOnChartArea: false } }
-                }
-            }
-        });
-        attachRunEddingtonInfo._multiplier = multiplier;
-        attachRunEddingtonInfo(distId, eddington, isWeekly ? 'weekly' : 'distribution');
-    }
-
-    if (eddington.achievementSeries.length) {
-        const milestoneLabels = isWeekly ? null : getRunMilestoneLabels();
-        const milestoneData = milestoneLabels
-            ? eddington.achievementSeries.filter(p => milestoneLabels.has(p.threshold)).map(p => ({ x: p.date, y: p.threshold, label: milestoneLabels.get(p.threshold) }))
-            : [];
-        const datasets = [
-            {
-                label: isWeekly ? 'Weekly Eddington reached' : 'Eddington reached',
-                data: eddington.achievementSeries.map(p => p.threshold),
-                borderColor: '#FC5200',
-                backgroundColor: 'rgba(252, 82, 0, 0.18)',
-                pointRadius: 2, pointHoverRadius: 4, tension: 0.15, fill: false
-            }
-        ];
-        if (!isWeekly && milestoneData.length) {
-            datasets.push({
-                label: 'Milestones', type: 'scatter', data: milestoneData,
-                borderColor: '#7c2d12', backgroundColor: '#7c2d12',
-                pointRadius: 5, pointHoverRadius: 7, pointStyle: 'rectRot', showLine: false
-            });
-        }
-        createChart(progId, {
-            type: 'line',
-            data: { labels: eddington.achievementSeries.map(p => p.date), datasets },
-            options: {
-                plugins: {
-                    legend: { position: 'bottom' },
-                    tooltip: {
-                        callbacks: {
-                            title(items) { return items[0]?.label || ''; },
-                            label(context) {
-                                if (context.datasetIndex === 1) return `${context.raw.label}. Reached when you had ${context.raw.y} days of at least ${context.raw.y} km.`;
-                                const suffix = isWeekly ? ` (≥ ${(context.raw * multiplier).toFixed(0)} km/week)` : '';
-                                return `Reached E${context.raw}${suffix} on ${context.label}`;
-                            }
-                        }
-                    }
-                },
-                scales: {
-                    x: { title: { display: true, text: 'Achievement date' } },
-                    y: { beginAtZero: true, title: { display: true, text: isWeekly ? `Weekly Eddington (×${multiplier})` : 'Eddington number (km)' } }
-                }
-            }
-        });
-        attachRunEddingtonInfo._multiplier = multiplier;
-        attachRunEddingtonInfo(progId, eddington, isWeekly ? 'weekly' : 'progression');
-    }
-}
-
-export function renderDistanceSection(runs, rollingWindowWeeks = 26) {
+export function renderDistanceSection(runs) {
     renderAccumulatedDistanceChart(runs);
-    renderRollingMeanDistanceChart(runs, rollingWindowWeeks);
 }
-
-export function renderEddingtonSection(runs) {
-    const selectorEl = document.getElementById('run-eddington-mode-selector');
-    function getMode() {
-        return selectorEl?.querySelector('.eddington-mode-btn.active')?.dataset.mode || 'daily';
-    }
-    if (selectorEl) {
-        selectorEl._runs = runs;
-        if (!selectorEl.dataset.bound) {
-            selectorEl.querySelectorAll('.eddington-mode-btn').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    selectorEl.querySelectorAll('.eddington-mode-btn').forEach(b => b.classList.remove('active'));
-                    btn.classList.add('active');
-                    _drawRunEddingtonCharts(selectorEl._runs, btn.dataset.mode);
-                });
-            });
-            selectorEl.dataset.bound = 'true';
-        }
-    }
-    _drawRunEddingtonCharts(runs, getMode());
-}
-
-
 
 export function renderRunsHeatmap(runs) {
     const mapDiv = document.getElementById("runs-heatmap");
@@ -1996,270 +1278,6 @@ export function renderPaceHrCurveChart(runs) {
     });
 }
 
-export function renderConsistencyImprovementChart(runs) {
-    const validRuns = runs.filter(
-        r => r.average_heartrate && r.distance && r.moving_time
-    );
-
-    if (validRuns.length === 0) return;
-
-    const calculateEfficiency = r => r.efficiency;
-
-    // Group by month
-    const monthlyData = {};
-
-    validRuns.forEach(run => {
-        const date = new Date(run.start_date_local);
-        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-
-        if (!monthlyData[monthKey]) {
-            monthlyData[monthKey] = [];
-        }
-
-        monthlyData[monthKey].push(run);
-    });
-
-    // Sort months chronologically
-    const sortedMonths = Object.entries(monthlyData)
-        .sort((a, b) => new Date(a[0]) - new Date(b[0]));
-
-    const monthlyStats = sortedMonths.map(([month, monthRuns]) => {
-        const runsCount = monthRuns.length;
-
-        const efficiencies = monthRuns.map(calculateEfficiency);
-
-        const mean =
-            efficiencies.reduce((a, b) => a + b, 0) / efficiencies.length;
-
-        const std = Math.sqrt(
-            efficiencies
-                .reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) /
-            efficiencies.length
-        );
-
-        const cv = mean !== 0 ? std / mean : 0;
-
-        return {
-            month,
-            runsCount,
-            cv,
-            meanEfficiency: mean
-        };
-    }).filter(stat => stat.runsCount >= 5);
-
-    if (monthlyStats.length < 2) return;
-
-    // Improvement vs previous month
-    const improvementData = [];
-
-    for (let i = 1; i < monthlyStats.length; i++) {
-        const current = monthlyStats[i];
-        const previous = monthlyStats[i - 1];
-
-        const improvement =
-            previous.meanEfficiency !== 0
-                ? (previous.meanEfficiency - current.meanEfficiency) /
-                  previous.meanEfficiency
-                : 0;
-
-        improvementData.push({
-            x: current.cv,
-            y: improvement * 100,
-            month: current.month
-        });
-    }
-
-    if (improvementData.length === 0) return;
-
-    // Linear regression
-    const n = improvementData.length;
-
-    const sumX = improvementData.reduce((sum, d) => sum + d.x, 0);
-    const sumY = improvementData.reduce((sum, d) => sum + d.y, 0);
-    const sumXY = improvementData.reduce((sum, d) => sum + d.x * d.y, 0);
-    const sumXX = improvementData.reduce((sum, d) => sum + d.x * d.x, 0);
-
-    const slope =
-        (n * sumXY - sumX * sumY) /
-        (n * sumXX - sumX * sumX || 1);
-
-    const intercept = (sumY - slope * sumX) / n;
-
-    const minX = Math.min(...improvementData.map(d => d.x));
-    const maxX = Math.max(...improvementData.map(d => d.x));
-
-    const regressionLine = [
-        { x: minX, y: slope * minX + intercept },
-        { x: maxX, y: slope * maxX + intercept }
-    ];
-
-    const formatMonth = (m) => {
-        const [y, mo] = m.split('-');
-        return `${mo}/${y}`;
-    };
-
-    createChart('consistency-improvement-chart', {
-        type: 'scatter',
-        data: {
-            datasets: [
-                {
-                    label: 'Monthly data',
-                    data: improvementData,
-                    backgroundColor: 'rgba(252, 82, 0, 0.7)',
-                    pointRadius: 6
-                },
-                {
-                    label: `Trend line (slope: ${slope.toFixed(4)})`,
-                    data: regressionLine,
-                    borderColor: 'rgba(93, 22, 1, 1)',
-                    backgroundColor: 'rgba(93, 22, 1, 0.1)',
-                    type: 'line',
-                    pointRadius: 0,
-                    tension: 0
-                }
-            ]
-        },
-        options: {
-            plugins: {
-                tooltip: {
-                    callbacks: {
-                        label: function (context) {
-                            const point = context.raw;
-                            const month = formatMonth(point.month);
-
-                            return [
-                                `Month: ${month}`,
-                                `Consistency (CV): ${point.x.toFixed(3)}`,
-                                `Efficiency change: ${point.y.toFixed(2)}%`
-                            ];
-                        }
-                    }
-                }
-            },
-            scales: {
-                x: {
-                    title: {
-                        display: true,
-                        text: 'Monthly Consistency (CV)'
-                    }
-                },
-                y: {
-                    title: {
-                        display: true,
-                        text: 'Change in aerobic efficiency (%)'
-                    }
-                }
-            }
-        }
-    });
-
-    utils.upsertChartInfo('consistency-improvement-chart', {
-        title: 'Monthly Consistency vs Improvement',
-        bodyHtml: `
-        This chart shows how training consistency within each month relates to changes in aerobic efficiency over time.<br><br>
-
-        Consistency (CV) measures how variable your runs are during a month. Lower values mean more stable training, while higher values indicate more variability.<br><br>
-
-        The vertical axis shows the percentage change in aerobic efficiency compared to the previous month. Positive values indicate improvement, while negative values indicate decline.<br><br>
-
-        This relationship is correlational and should be interpreted alongside training load, terrain, and intensity distribution.
-        `,
-        accentColor: '#FC5200'
-    });
-}
-
-export function renderVolumeImprovementChart(runs) {
-    const validRuns = runs.filter(r => r.average_heartrate && r.distance && r.moving_time);
-    if (validRuns.length === 0) return;
-
-    // Group by month and calculate volume and efficiency
-    const monthlyData = {};
-    validRuns.forEach(run => {
-        const date = new Date(run.start_date_local);
-        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-
-        if (!monthlyData[monthKey]) {
-            monthlyData[monthKey] = { runs: [], volume: 0 };
-        }
-        monthlyData[monthKey].runs.push(run);
-        monthlyData[monthKey].volume += run.distance / 1000; // km
-    });
-
-    const calculateEfficiency = r => r.efficiency;
-
-    const monthlyStats = Object.entries(monthlyData)
-        .map(([month, data]) => {
-            const efficiencies = data.runs.map(calculateEfficiency);
-            const meanEfficiency = efficiencies.reduce((a, b) => a + b, 0) / efficiencies.length;
-            return { month, volume: data.volume, meanEfficiency };
-        })
-        .sort((a, b) => a.volume - b.volume);
-
-    if (monthlyStats.length < 6) return; // Need enough months for quintiles
-
-    // Divide into quintiles
-    const quintileSize = Math.floor(monthlyStats.length / 5);
-    const quintiles = [];
-    for (let i = 0; i < 5; i++) {
-        const start = i * quintileSize;
-        const end = i === 4 ? monthlyStats.length : (i + 1) * quintileSize;
-        quintiles.push(monthlyStats.slice(start, end));
-    }
-
-    // Calculate improvement percentage for each quintile
-    const improvementRates = quintiles.map((quintile, idx) => {
-        let improvementCount = 0;
-        quintile.forEach(monthStat => {
-            // Find previous month
-            const monthIndex = monthlyStats.findIndex(m => m.month === monthStat.month);
-            if (monthIndex > 0) {
-                const prevEfficiency = monthlyStats[monthIndex - 1].meanEfficiency;
-                const currentEfficiency = monthStat.meanEfficiency;
-                if (currentEfficiency < prevEfficiency) { // Lower efficiency = better (faster)
-                    improvementCount++;
-                }
-            }
-        });
-
-        const totalMonths = quintile.length;
-        const improvementRate = totalMonths > 0 ? (improvementCount / totalMonths) * 100 : 0;
-
-        return {
-            quintile: `Q${idx + 1} (${quintile[0].volume.toFixed(1)}-${quintile[quintile.length - 1].volume.toFixed(1)} km)`,
-            improvementRate,
-            avgVolume: quintile.reduce((sum, m) => sum + m.volume, 0) / quintile.length
-        };
-    });
-
-    createChart('volume-improvement-chart', {
-        type: 'bar',
-        data: {
-            labels: improvementRates.map(d => d.quintile),
-            datasets: [{
-                label: 'Improvement Rate (%)',
-                data: improvementRates.map(d => d.improvementRate),
-                backgroundColor: 'rgba(252, 82, 0, 0.7)',
-                borderColor: 'rgba(252, 82, 0, 1)',
-                borderWidth: 1
-            }]
-        },
-        options: {
-            scales: {
-                x: { title: { display: true, text: 'Volume Quintiles' } },
-                y: { title: { display: true, text: 'Improvement Rate (%)' } }
-            }
-        }
-    });
-
-    utils.upsertChartInfo('volume-improvement-chart', {
-        title: 'Monthly Volume vs Improvement Probability',
-        bodyHtml: `Here you see how monthly training volume relates to the probability of improvement.<br>
-        We group your months by volume (total distance or number of sessions) and calculate in what percentage of those months your performance at constant heart rate improved compared to the previous month.<br>
-        Higher bars indicate that, in those volume ranges, it's more likely that your training translates into real improvement.`,
-        accentColor: '#FC5200'
-    });
-}
-
 export function renderEfficiencyEvolutionChart(runs) {
     const validRuns = runs.filter(
         r => r.average_heartrate && r.distance && r.moving_time
@@ -2534,7 +1552,9 @@ export function renderPaceHrEfficiencyChart(runs, mode = 'single') {
         const sumY = dataPoints.reduce((sum, d) => sum + d.y, 0);
         const sumXY = dataPoints.reduce((sum, d) => sum + d.x * d.y, 0);
         const sumXX = dataPoints.reduce((sum, d) => sum + d.x * d.x, 0);
-        const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+        const denominator = n * sumXX - sumX * sumX;
+        if (denominator === 0) return null; // all points share the same heart rate: no slope
+        const slope = (n * sumXY - sumX * sumY) / denominator;
         const intercept = (sumY - slope * sumX) / n;
         const minX = Math.min(...dataPoints.map(d => d.x));
         const maxX = Math.max(...dataPoints.map(d => d.x));
@@ -2560,17 +1580,18 @@ export function renderPaceHrEfficiencyChart(runs, mode = 'single') {
                 data: data,
                 backgroundColor: 'rgba(252, 82, 0, 0.7)',
                 pointRadius: 4
-            },
-            {
-                label: `Regression (slope: ${regression.slope.toFixed(4)} min/km per bpm)`,
-                data: regression.line,
-                borderColor: 'rgba(93, 22, 1, 1)',
-                backgroundColor: 'rgba(93, 22, 1, 0.1)',
-                type: 'line',
-                pointRadius: 0,
-                tension: 0
             }
         ];
+        // Needs at least two runs with different heart rates; otherwise show the points only
+        if (regression) datasets.push({
+            label: `Regression (slope: ${regression.slope.toFixed(4)} min/km per bpm)`,
+            data: regression.line,
+            borderColor: 'rgba(93, 22, 1, 1)',
+            backgroundColor: 'rgba(93, 22, 1, 0.1)',
+            type: 'line',
+            pointRadius: 0,
+            tension: 0
+        });
         title = 'Pace vs Heart Rate';
         bodyHtml = `
         <button class="toggle-regression-btn" style="margin-bottom: 10px;">Show Progress Regressions</button><br>

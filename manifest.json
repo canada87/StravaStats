@@ -1,7 +1,7 @@
 {
     "name": "StravaStats",
     "short_name": "StravaStats",
-    "description": "Complete analysis of your sports activities: running, cycling, swimming",
+    "description": "Complete analysis of your sports activities: running, cycling",
     "start_url": "/",
     "scope": "/",
     "display": "standalone",

@@ -22,7 +22,7 @@
     <script>
         /**
          * Activity Router - Detects activity type and routes to appropriate page
-         * Supports: Run, Swim, Bike, general Activity
+         * Supports: Run, Bike, general Activity
          */
         async function routeActivity() {
             try {
@@ -50,9 +50,7 @@
                 let targetPage = 'activity.html';
 
                 // Route based on sport type
-                if (sportType.toLowerCase().includes('swim')) {
-                    targetPage = 'swim.html';
-                } else if (
+                if (
                     sportType === 'Run' ||
                     sportType === 'TrailRun' ||
                     sportType.toLowerCase().includes('run')

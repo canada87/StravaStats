@@ -511,7 +511,7 @@ function renderGearActivitiesList(activities, gearType) {
         return;
     }
 
-    const typeIcon = t => ({ Run: '🏃', TrailRun: '🏔️', VirtualRun: '🖥️', Ride: '🚴', VirtualRide: '💻', GravelRide: '🪨', MountainBikeRide: '⛰️', Walk: '🚶', Hike: '🥾', Swim: '🏊' }[t] || '🏅');
+    const typeIcon = t => ({ Run: '🏃', TrailRun: '🏔️', VirtualRun: '🖥️', Ride: '🚴', VirtualRide: '💻', GravelRide: '🪨', MountainBikeRide: '⛰️', Walk: '🚶', Hike: '🥾' }[t] || '🏅');
 
     const rows = activities.map(a => {
         const km = (a.distance / 1000).toFixed(1);

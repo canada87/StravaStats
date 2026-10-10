@@ -1,11 +1,10 @@
 import * as utils from './utils.js';
 
 const RUN_TYPES = new Set(['Run', 'TrailRun', 'VirtualRun']);
-const SWIM_TYPES = new Set(['Swim', 'OpenWaterSwim']);
 const BIKE_TYPES = new Set(['Ride', 'VirtualRide', 'GravelRide', 'GravelBikeRide', 'MountainBikeRide', 'EBikeRide']);
 const GYM_TYPES = new Set(['Workout', 'WeightTraining', 'Crossfit', 'Yoga']);
 
-const CATEGORY_ORDER = ['Run', 'Ride', 'Swim', 'Gym', 'Other'];
+const CATEGORY_ORDER = ['Run', 'Ride', 'Gym', 'Other'];
 const WEEKDAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 let reportCharts = {};
@@ -14,7 +13,6 @@ const SPORT_PALETTE = {
     Run: [16, 90], TrailRun: [25, 85], VirtualRun: [12, 80],
     Ride: [215, 80], VirtualRide: [210, 70], GravelRide: [200, 75],
     MountainBikeRide: [190, 80], EBikeRide: [205, 65],
-    Swim: [185, 85], OpenWaterSwim: [195, 80],
     Walk: [142, 65], Hike: [130, 60],
     Workout: [270, 70], WeightTraining: [280, 65], Yoga: [310, 60],
     AlpineSki: [240, 75], NordicSki: [230, 70], Snowboard: [245, 80],
@@ -29,7 +27,6 @@ function getType(activity) {
 function getCategory(type) {
     if (RUN_TYPES.has(type)) return 'Run';
     if (BIKE_TYPES.has(type)) return 'Ride';
-    if (SWIM_TYPES.has(type)) return 'Swim';
     if (GYM_TYPES.has(type)) return 'Gym';
     return 'Other';
 }
@@ -184,7 +181,7 @@ function filterByYear(activities, year) {
 }
 
 function summarizeByCategory(activities) {
-    const map = { Run: 0, Ride: 0, Swim: 0, Gym: 0, Other: 0 };
+    const map = { Run: 0, Ride: 0, Gym: 0, Other: 0 };
     activities.forEach(activity => {
         const type = getType(activity);
         const category = getCategory(type);
@@ -407,7 +404,6 @@ function ensureExportControls(selectedYear, current, previousYear) {
 function findRecords(currentYearActivities) {
     const runs = currentYearActivities.filter(activity => RUN_TYPES.has(getType(activity)));
     const rides = currentYearActivities.filter(activity => BIKE_TYPES.has(getType(activity)));
-    const swims = currentYearActivities.filter(activity => SWIM_TYPES.has(getType(activity)));
 
     const longest = currentYearActivities.slice().sort((a, b) => (b.distance || 0) - (a.distance || 0))[0] || null;
     const mostElevation = currentYearActivities.slice().sort((a, b) => (b.total_elevation_gain || 0) - (a.total_elevation_gain || 0))[0] || null;
@@ -423,9 +419,8 @@ function findRecords(currentYearActivities) {
 
     const longestRun = runs.slice().sort((a, b) => (b.distance || 0) - (a.distance || 0))[0] || null;
     const longestRide = rides.slice().sort((a, b) => (b.distance || 0) - (a.distance || 0))[0] || null;
-    const longestSwim = swims.slice().sort((a, b) => (b.distance || 0) - (a.distance || 0))[0] || null;
 
-    return { longest, mostElevation, highestTSS, fastestRunPace, longestRun, longestRide, longestSwim };
+    return { longest, mostElevation, highestTSS, fastestRunPace, longestRun, longestRide };
 }
 
 function bestWeekAndMonth(activities) {
@@ -566,11 +561,9 @@ function renderSportsSection(container, current, previous) {
                 ? '🏃'
                 : category === 'Ride'
                     ? '🚴'
-                    : category === 'Swim'
-                        ? '🏊'
-                        : category === 'Gym'
-                            ? '🏋️'
-                            : '🎯';
+                    : category === 'Gym'
+                        ? '🏋️'
+                        : '🎯';
 
             return `
                 <div class="sport-card fade-in-up">
@@ -763,11 +756,6 @@ function renderRecordsSection(container, current) {
             title: 'Longest Ride',
             value: records.longestRide ? utils.formatDistance(records.longestRide.distance || 0) : 'N/A',
             detail: records.longestRide ? activityLink(records.longestRide, records.longestRide.name || 'View activity') : ''
-        },
-        {
-            title: 'Longest Swim',
-            value: records.longestSwim ? utils.formatDistance(records.longestSwim.distance || 0) : 'N/A',
-            detail: records.longestSwim ? activityLink(records.longestSwim, records.longestSwim.name || 'View activity') : ''
         },
         {
             title: 'Most Elevation',

@@ -1,5 +1,5 @@
 // api/local-activity.js — Single-activity detail endpoint.
-// Used directly (by URL) from js/pages/{activity,run,bike,swim}/*.js and
+// Used directly (by URL) from js/pages/{activity,run,bike}/*.js and
 // js/pages/activity/advanced-analysis.js — see LOCAL_GPX_MIGRATION_PLAN.md §6.
 
 import { readActivitySummary, readGear, updateActivitySummary, deleteActivity } from './_local/store.js';

@@ -373,7 +373,6 @@ function renderTransitions(activities) {
     // Normalize sport type to simplified category
     const normalizeSport = a => {
         const t = (a.sport_type || a.type || '').toLowerCase();
-        if (t.includes('swim')) return 'Swim';
         if (t.includes('ride') || t.includes('bike') || t.includes('cycling')) return 'Bike';
         if (t.includes('run')) return 'Run';
         return a.type || 'Other';
@@ -381,7 +380,7 @@ function renderTransitions(activities) {
 
     // Find transitions: activities within 2 hours of each other
     const MAX_GAP_MS = 2 * 60 * 60 * 1000; // 2 hours
-    const transitionCounts = {}; // "Swim→Bike" → count
+    const transitionCounts = {}; // "Bike→Run" → count
     const transitionExamples = {};
 
     for (let i = 0; i < sorted.length - 1; i++) {
@@ -420,9 +419,7 @@ function renderTransitions(activities) {
         const labels = entries.map(([k]) => k);
         const data = entries.map(([, v]) => v);
         const colors = labels.map(l => {
-            if (l.includes('Swim') && l.includes('Bike')) return 'rgba(0,131,143,0.7)';
             if (l.includes('Bike') && l.includes('Run')) return 'rgba(46,125,50,0.7)';
-            if (l.includes('Swim') && l.includes('Run')) return 'rgba(21,101,192,0.7)';
             return 'rgba(252,76,2,0.7)';
         });
 
@@ -448,13 +445,13 @@ function renderTransitions(activities) {
 
     // Details table
     if (detailsEl) {
-        const triathlon = (transitionCounts['Swim→Bike'] || 0) + (transitionCounts['Bike→Run'] || 0);
+        const brick = transitionCounts['Bike→Run'] || 0;
         const rows = entries.slice(0, 8).map(([key, count]) =>
             `<tr><td>${key}</td><td>${count}</td><td style="color:#888;font-size:0.85em;">${(transitionExamples[key] || []).join(', ')}</td></tr>`
         ).join('');
 
         detailsEl.innerHTML = `
-            ${triathlon > 0 ? `<p style="margin-bottom:0.75rem;"><strong>Triathlon-style transitions:</strong> ${triathlon} (Swim→Bike + Bike→Run)</p>` : ''}
+            ${brick > 0 ? `<p style="margin-bottom:0.75rem;"><strong>Brick sessions:</strong> ${brick} (Bike→Run)</p>` : ''}
             <table class="compact-table">
                 <thead><tr><th>Transition</th><th>Count</th><th>Examples</th></tr></thead>
                 <tbody>${rows}</tbody>

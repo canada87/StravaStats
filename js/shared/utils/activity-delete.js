@@ -1,6 +1,6 @@
 // js/shared/utils/activity-delete.js
 // Lets the user delete an activity outright from within its own detail page (run.html,
-// bike.html, swim.html, activity.html) — the GPX-import equivalent of removing a mistaken
+// bike.html, activity.html) — the GPX-import equivalent of removing a mistaken
 // upload, since there's no Strava account to delete it from anymore.
 import { deleteActivity } from '../../services/index.js';
 

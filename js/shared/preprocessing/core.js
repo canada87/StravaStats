@@ -8,144 +8,6 @@ import { loadWeatherCache, saveWeatherEntries, buildWeatherCacheKey } from '../.
 const SUFFER_TO_TSS = 1;
 const MAX_HR_DEFAULT = 190;
 
-// Indoor swim correction for a known historical pool length misconfiguration
-// (recorded as 25m, actual 20m) for a specific athlete and date window.
-const INDOOR_SWIM_DISTANCE_CORRECTION = 20 / 25;
-const INDOOR_SWIM_CORRECTION_TAG = 'piscina-20m';
-const INDOOR_SWIM_CORRECTION_CUTOFF = '2025-08-19';
-const TARGET_ATHLETE_ID = 66914681;
-
-function normalizeText(value) {
-    return String(value || '')
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .trim()
-        .toLowerCase();
-}
-
-function isTargetAthleteAlexGascon(userProfile = {}) {
-    let profile = userProfile || {};
-
-    // Fallback to cached athlete profile if API athlete fetch was unavailable.
-    if ((!profile.firstname && !profile.lastname && !profile.username) && typeof localStorage !== 'undefined') {
-        try {
-            const cached = JSON.parse(localStorage.getItem('strava_athlete_data') || 'null');
-            if (cached) profile = cached;
-        } catch (_err) {
-            // ignore malformed cache
-        }
-    }
-
-    const first = normalizeText(profile.firstname);
-    const last = normalizeText(profile.lastname);
-    const fullName = `${first} ${last}`.trim();
-    const username = normalizeText(profile.username);
-    const athleteId = Number(profile.id);
-
-    return athleteId === TARGET_ATHLETE_ID || fullName === 'alex gascon' || username === 'gascn_alex' || username === 'alexgasconn' || username === 'alexgascon';
-}
-
-function isDateOnOrBeforeCutoff(activity, cutoffIsoDate) {
-    const datePart = String(activity?.start_date_local || activity?.start_date || '').slice(0, 10);
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(datePart)) return false;
-    return datePart <= cutoffIsoDate;
-}
-
-function isIndoorPoolSwim(activity) {
-    const sportType = String(activity?.sport_type || activity?.type || '');
-    if (!/swim/i.test(sportType) || /openwater/i.test(sportType)) return false;
-
-    if (activity?.trainer === true) return true;
-
-    const hasStartLatLng = Array.isArray(activity?.start_latlng) && activity.start_latlng.length === 2;
-    return !hasStartLatLng;
-}
-
-function addTag(activity, tag) {
-    if (!Array.isArray(activity.tags)) {
-        activity.tags = [];
-    }
-    if (!activity.tags.includes(tag)) {
-        activity.tags.push(tag);
-    }
-}
-
-function applyIndoorSwimPool20mCorrection(activities, userProfile = {}) {
-    if (!isTargetAthleteAlexGascon(userProfile)) {
-        return;
-    }
-
-    activities.forEach(activity => {
-        if (!isIndoorPoolSwim(activity)) return;
-        if (!isDateOnOrBeforeCutoff(activity, INDOOR_SWIM_CORRECTION_CUTOFF)) return;
-
-        const originalDistance = Number(activity.distance) || 0;
-        const originalMovingTime = Number(activity.moving_time) || 0;
-
-        if (originalDistance > 0) {
-            activity.distance = Math.max(1, Math.round(originalDistance * INDOOR_SWIM_DISTANCE_CORRECTION));
-        }
-
-        if (originalMovingTime > 0 && activity.distance > 0) {
-            // Recompute speed from corrected distance to keep pace coherent everywhere.
-            activity.average_speed = activity.distance / originalMovingTime;
-        } else if (Number(activity.average_speed) > 0) {
-            activity.average_speed = Number(activity.average_speed) * INDOOR_SWIM_DISTANCE_CORRECTION;
-        }
-
-        if (Number(activity.max_speed) > 0) {
-            activity.max_speed = Number(activity.max_speed) * INDOOR_SWIM_DISTANCE_CORRECTION;
-        }
-
-        activity.pool_length = 20;
-        addTag(activity, INDOOR_SWIM_CORRECTION_TAG);
-    });
-}
-
-// ===================================================================
-// Pool length estimation for all swim activities
-// ===================================================================
-const STANDARD_POOL_LENGTHS = [20, 25, 50];
-
-function estimatePoolLengths(activities) {
-    const swims = activities.filter(a => {
-        const t = (a.sport_type || a.type || '').toLowerCase();
-        return t.includes('swim') && !t.includes('openwater');
-    });
-    if (!swims.length) return;
-
-    // Build historical frequency of which pool lengths appear
-    const historicalCounts = { 20: 0, 25: 0, 50: 0 };
-    swims.forEach(a => {
-        if (a.pool_length) { historicalCounts[a.pool_length] = (historicalCounts[a.pool_length] || 0) + 1; return; }
-        if (!a.distance) return;
-        const candidates = STANDARD_POOL_LENGTHS.filter(p => a.distance % p === 0);
-        if (candidates.length === 1) historicalCounts[candidates[0]]++;
-    });
-
-    // Assign pool_length to swims that don't have it yet
-    swims.forEach(a => {
-        if (a.pool_length) return; // Already set (e.g. by 20m correction)
-        if (!a.distance || !a.moving_time) return;
-
-        const candidates = STANDARD_POOL_LENGTHS.filter(p => {
-            if (a.distance % p !== 0) return false;
-            const lengths = a.distance / p;
-            const timePerLength = a.moving_time / lengths;
-            // Realistic time per length: 15-120 seconds
-            return timePerLength >= 15 && timePerLength <= 120;
-        });
-
-        if (candidates.length === 1) {
-            a.pool_length = candidates[0];
-        } else if (candidates.length > 1) {
-            // Use historical frequency to pick most likely
-            candidates.sort((x, y) => (historicalCounts[y] || 0) - (historicalCounts[x] || 0));
-            a.pool_length = candidates[0];
-        }
-    });
-}
-
 // ===================================================================
 // WEATHER API FUNCTION
 // ===================================================================
@@ -238,7 +100,6 @@ async function getWeatherForRun(run) {
 //  7. Gravel/MTB     0.92  – cycling + vibration + technical
 //  8. Workout (gen)  0.78  – mixed moderate
 //  9. Weight Train.  0.72  – intermittent, lots of recovery between sets
-// 10. Swimming       0.65  – no impact, HR suppressed in water
 // 11. Alpine Ski     0.62  – lots of lift time, intermittent
 // 12. Walking        0.52  – low impact
 // 13. Yoga           0.35  – minimal metabolic stress
@@ -254,10 +115,6 @@ const SPORT_TSS_MULTIPLIER = {
     GravelRide: 0.80,
     MountainBikeRide: 0.85,
     EBikeRide: 0.71,
-    // Water
-    Swim: 0.75,
-    PoolSwim: 0.75,
-    OpenWaterSwim: 2.0, // Open water rule: final TSS multiplier ×2
     // Team/field
     Soccer: 1.05,
     // Hiking & walking
@@ -581,7 +438,6 @@ const RECOVERY_SPORT_FACTORS = {
     TrailRun: 1.5,
     Ride: 0.9,
     MountainBikeRide: 1.1,
-    Swim: 0.7,
     WeightTraining: 1.0,
     Soccer: 1.1,
     Padel: 0.8,
@@ -685,7 +541,6 @@ function calculateRecoveryHoursSeries(activities, dates) {
 function getSportCategory(activity) {
     const sportType = activity.sport_type || activity.type || '';
     if (/Run/i.test(sportType)) return 'run';
-    if (/Swim/i.test(sportType)) return 'swim';
     if (/Ride|Bike|Cycling/i.test(sportType)) return 'bike';
     return null;
 }
@@ -703,10 +558,6 @@ function computeEfficiencyFields(activity) {
     if (category === 'run') {
         const paceMinPerKm = (movingTime / 60) / (distance / 1000);
         return { efficiency: paceMinPerKm / avgHr, method: 'pace_per_hr' };
-    }
-    if (category === 'swim') {
-        const paceMinPer100m = (movingTime / 60) / (distance / 100);
-        return { efficiency: paceMinPer100m / avgHr, method: 'pace100m_per_hr' };
     }
     if (category === 'bike') {
         const avgSpeedKmh = (distance / 1000) / (movingTime / 3600);
@@ -746,9 +597,6 @@ function assignMetrics(activities, dates, pmc, injuryRisk, recoveryHours) {
 // ===================================================================
 export async function preprocessActivities(activities, userProfile = {}, zones = null, gears = null) {
     if (!activities?.length) return [];
-
-    applyIndoorSwimPool20mCorrection(activities, userProfile);
-    estimatePoolLengths(activities);
 
     // Derive maxHR from zones if available (last zone's max), fallback to profile, then default
     let maxHr = MAX_HR_DEFAULT;

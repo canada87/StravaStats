@@ -5,7 +5,6 @@ const SPORT_PALETTE = {
     Run: [16, 90], TrailRun: [25, 85], VirtualRun: [12, 80],
     Ride: [215, 80], VirtualRide: [210, 70], GravelRide: [200, 75],
     MountainBikeRide: [190, 80], EBikeRide: [205, 65],
-    Swim: [185, 85], OpenWaterSwim: [195, 80],
     Walk: [142, 65], Hike: [130, 60],
     Workout: [270, 70], WeightTraining: [280, 65], Yoga: [310, 60],
     AlpineSki: [240, 75], NordicSki: [230, 70], Snowboard: [245, 80],

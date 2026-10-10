@@ -473,7 +473,6 @@ function getRangeLabel(rangeType) {
 function getSportKey(type = '') {
     if (type.includes('Run')) return 'Run';
     if (type.includes('Ride')) return 'Ride';
-    if (type.includes('Swim')) return 'Swim';
     if (type.includes('WeightTraining') || type.includes('Workout')) return 'Gym';
     return 'Other';
 }
@@ -512,7 +511,7 @@ function getPmcProfile(loadActivities) {
     }, {});
 
     const total = loadActivities.length || 1;
-    const sports = ['Run', 'Ride', 'Swim', 'Gym'];
+    const sports = ['Run', 'Ride', 'Gym'];
     const rankedSports = sports
         .map(name => ({ name, count: counts[name] || 0, share: (counts[name] || 0) / total }))
         .sort((a, b) => b.count - a.count);
@@ -532,8 +531,6 @@ function getPmcProfile(loadActivities) {
         thresholds = { deepFatigue: -14, fatigue: -6, balanced: 6, fresh: 16 };
     } else if (dominantSport === 'Ride') {
         thresholds = { deepFatigue: -24, fatigue: -12, balanced: 6, fresh: 20 };
-    } else if (dominantSport === 'Swim') {
-        thresholds = { deepFatigue: -16, fatigue: -8, balanced: 7, fresh: 16 };
     } else if (dominantSport === 'Run') {
         thresholds = { deepFatigue: -18, fatigue: -8, balanced: 5, fresh: 18 };
     }
@@ -560,7 +557,7 @@ function renderDashboardTopline(recentActivities) {
         return acc;
     }, {});
 
-    const sportMixText = ['Run', 'Ride', 'Swim', 'Gym']
+    const sportMixText = ['Run', 'Ride', 'Gym']
         .filter(key => sportCounts[key])
         .map(key => `${key}: ${sportCounts[key]}`)
         .join(' · ') || 'No recent activities in this period';
@@ -3168,11 +3165,10 @@ function getTSSBarChartData(activities, rangeType, startDate, endDate, unit) {
     const isWeekly = rangeType === 'last3m' || rangeType === 'last6m';
     const isMonthly = rangeType === 'year' || rangeType === 'last365';
 
-    const sports = ['Run', 'Ride', 'Swim', 'Gym'];
+    const sports = ['Run', 'Ride', 'Gym'];
     const sportColors = {
         Run: '#ff7f50',
         Ride: '#20b2aa',
-        Swim: '#1e90ff',
         Gym: '#9370db',
         Other: '#95a5a6'
     };
@@ -3203,7 +3199,6 @@ function getTSSBarChartData(activities, rangeType, startDate, endDate, unit) {
             total: 0,
             Run: 0,
             Ride: 0,
-            Swim: 0,
             Gym: 0,
             Other: 0
         };
@@ -3302,11 +3297,10 @@ function getTSSBarChartData(activities, rangeType, startDate, endDate, unit) {
  * Get TSS bar chart data with QUARTERLY aggregation for All Time range
  */
 function getTSSBarChartDataQuarterly(activities, unit) {
-    const sports = ['Run', 'Ride', 'Swim', 'Gym'];
+    const sports = ['Run', 'Ride', 'Gym'];
     const sportColors = {
         Run: '#ff7f50',
         Ride: '#20b2aa',
-        Swim: '#1e90ff',
         Gym: '#9370db',
         Other: '#95a5a6'
     };
@@ -3329,8 +3323,7 @@ function getTSSBarChartDataQuarterly(activities, unit) {
                     total: 0,
                     Run: 0,
                     Ride: 0,
-                    Swim: 0,
-                    Gym: 0,
+                            Gym: 0,
                     Other: 0
                 };
             }
@@ -3441,7 +3434,6 @@ const GOAL_SPORTS = [
     { label: 'All', value: 'all' },
     { label: '🏃 Run', value: 'Run' },
     { label: '🚴 Ride', value: 'Ride' },
-    { label: '🏊 Swim', value: 'Swim' },
     { label: '💪 Gym', value: 'Workout' },
 ];
 

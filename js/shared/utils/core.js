@@ -407,8 +407,6 @@ export const SPORT_EMOJI = {
     GravelRide: '🪨',
     MountainBikeRide: '🚵',
     EBikeRide: '🚴',
-    Swim: '🏊',
-    OpenWaterSwim: '🌊',
     Walk: '🚶',
     Hike: '🥾',
     Tennis: '🎾',
@@ -439,14 +437,6 @@ export function formatPaceRun(secondsPerKm) {
     return `${min}:${sec.toString().padStart(2, '0')} /km`;
 }
 
-export function formatPaceSwim(secondsPer100m) {
-    if (secondsPer100m == null || !isFinite(secondsPer100m) || secondsPer100m <= 0) return '—';
-    let min = Math.floor(secondsPer100m / 60);
-    let sec = Math.round(secondsPer100m % 60);
-    if (sec === 60) { min += 1; sec = 0; }
-    return `${min}:${sec.toString().padStart(2, '0')} /100m`;
-}
-
 export function formatSpeedBike(kmh) {
     if (kmh == null || !isFinite(kmh)) return '—';
     return `${kmh.toFixed(1)} km/h`;
@@ -455,7 +445,6 @@ export function formatSpeedBike(kmh) {
 export function formatSportPace(value, sport) {
     if (value == null || !isFinite(value)) return '—';
     const s = sport || '';
-    if (/Swim/i.test(s)) return formatPaceSwim(value);
     if (/Ride|Bike|Cycling/i.test(s)) return formatSpeedBike(value);
     if (/Run/i.test(s)) return formatPaceRun(value);
     return formatPaceRun(value);

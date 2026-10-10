@@ -205,13 +205,6 @@ export const SPORT_CONFIGS = {
         ...DEFAULT_ATHLETE_PROFILE,
         ...QUICK_ANALYSIS_CONFIG,
         enable_fatigue_analysis: false
-    },
-
-    'Swimming': {
-        ...DEFAULT_ATHLETE_PROFILE,
-        ...QUICK_ANALYSIS_CONFIG,
-        enable_climb_detection: false,
-        enable_aero_analysis: false
     }
 };
 
@@ -295,8 +288,7 @@ export const SPORT_STREAMS = {
     'Cycling': ['time', 'latlng', 'distance', 'altitude', 'velocity_smooth', 'grade_smooth', 'heartrate', 'cadence', 'watts', 'moving'],
     'Mountain Biking': ['time', 'latlng', 'distance', 'altitude', 'velocity_smooth', 'grade_smooth', 'heartrate', 'cadence', 'watts', 'moving'],
     'Hiking': ['time', 'latlng', 'distance', 'altitude', 'velocity_smooth', 'grade_smooth', 'heartrate', 'moving'],
-    'Walking': ['time', 'latlng', 'distance', 'altitude', 'velocity_smooth', 'moving'],
-    'Swimming': ['time', 'latlng', 'distance']
+    'Walking': ['time', 'latlng', 'distance', 'altitude', 'velocity_smooth', 'moving']
 };
 
 /**

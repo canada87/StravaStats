@@ -5,7 +5,7 @@ import { formatDistance, formatPace, formatTime, formatDate } from './utils.js';
 import { getCachedGears } from './api.js';
 import { fetchAllGears, setCachedGears, createGear, updateGear, retireGear, deleteGearPermanently, bulkAssignGear } from '../services/index.js';
 
-const SPORT_OPTIONS = ['Run', 'TrailRun', 'Ride', 'MountainBikeRide', 'Swim', 'Hike', 'Walk'];
+const SPORT_OPTIONS = ['Run', 'TrailRun', 'Ride', 'MountainBikeRide', 'Hike', 'Walk'];
 
 // ===================================================================
 // SHARED UTILITIES (exported for use by gear-analysis.js etc.)

@@ -23,7 +23,6 @@
     --sport-default-color: var(--color-primary);
     --sport-run-color: var(--color-sport-run);
     --sport-bike-color: var(--color-sport-bike);
-    --sport-swim-color: var(--color-sport-swim);
     --tab-bg-overlay: var(--color-bg-overlay-light);
 }
 
@@ -466,7 +465,7 @@ main {
     border-radius: 4px;
 }
 
-/* LAYOUT GRIDS (used in run, bike, swim, athlete tabs) */
+/* LAYOUT GRIDS (used in run, bike, athlete tabs) */
 .summary-grid {
     display: grid;
     gap: 1.5rem;
@@ -492,7 +491,7 @@ main {
     grid-column: 1 / -1;
 }
 
-/* ROLLING SELECTOR (used in run, bike, swim) */
+/* ROLLING SELECTOR (used in run, bike) */
 .rolling-selector {
     display: flex;
     align-items: center;
@@ -521,7 +520,7 @@ main {
     border-color: var(--color-primary);
 }
 
-/* DATE CONTROLS (used in run, bike, swim tabs) */
+/* DATE CONTROLS (used in run, bike tabs) */
 .date-controls-container {
     display: flex;
     flex-wrap: wrap;
@@ -557,7 +556,7 @@ main {
     color: white;
 }
 
-/* EDDINGTON (used in run, bike, swim) */
+/* EDDINGTON (used in run, bike) */
 .eddington-section {
     margin-bottom: 2rem;
 }
@@ -817,7 +816,7 @@ main {
     background: #fdfdfd;
 }
 
-/* COMPACT TABLES (used in run/bike/swim top lists) */
+/* COMPACT TABLES (used in run/bike top lists) */
 .compact-table {
     width: 100%;
     border-collapse: collapse;

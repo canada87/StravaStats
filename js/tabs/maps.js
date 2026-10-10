@@ -105,7 +105,6 @@ export function renderMapTab(activities = [], dateFrom = null, dateTo = null) {
     const typeColors = {
         Run: '#e31a1c',
         Ride: '#1f78b4',
-        Swim: '#33a02c',
         Walk: '#ff7f00',
         Hike: '#6a3d9a',
         Row: '#b15928',

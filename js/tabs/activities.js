@@ -3,11 +3,10 @@ import { showNotification } from './gear.js';
 import { updateActivityType, deleteActivity } from '../services/index.js';
 
 const RUN_TYPES = new Set(['Run', 'TrailRun', 'VirtualRun']);
-const SWIM_TYPES = new Set(['Swim', 'OpenWaterSwim']);
 const BIKE_TYPES = new Set(['Ride', 'VirtualRide', 'GravelRide', 'MountainBikeRide', 'EBikeRide']);
 // Sport values the "Sport" column's inline editor offers — every value the app already has
-// pace/cadence-unit or emoji handling for (the three sets above, plus Hike/Walk).
-const SPORT_TYPE_OPTIONS = ['Run', 'TrailRun', 'VirtualRun', 'Ride', 'VirtualRide', 'GravelRide', 'MountainBikeRide', 'EBikeRide', 'Swim', 'OpenWaterSwim', 'Hike', 'Walk'];
+// pace/cadence-unit or emoji handling for (the two sets above, plus Hike/Walk).
+const SPORT_TYPE_OPTIONS = ['Run', 'TrailRun', 'VirtualRun', 'Ride', 'VirtualRide', 'GravelRide', 'MountainBikeRide', 'EBikeRide', 'Hike', 'Walk'];
 
 function sportEmoji(type) { return utils.sportEmoji(type); }
 function getType(a) { return (a.sport_type || a.type || 'Unknown').trim(); }
@@ -16,10 +15,6 @@ function getType(a) { return (a.sport_type || a.type || 'Unknown').trim(); }
 function fmtPaceSpeed(act) {
     if (!act.distance || !act.moving_time) return '–';
     const type = getType(act);
-    if (SWIM_TYPES.has(type)) {
-        const s = (act.moving_time / act.distance) * 100;
-        return `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}<small>/100m</small>`;
-    }
     if (RUN_TYPES.has(type)) {
         const s = act.moving_time / (act.distance / 1000);
         return `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}<small>/km</small>`;
@@ -378,7 +373,6 @@ function sortVal(act, col) {
     if (col === 'pace_speed') {
         if (!act.distance || !act.moving_time) return Infinity;
         const type = getType(act);
-        if (SWIM_TYPES.has(type)) return (act.moving_time / act.distance) * 100;
         if (RUN_TYPES.has(type)) return act.moving_time / (act.distance / 1000);
         return -((act.distance / act.moving_time) * 3.6);
     }

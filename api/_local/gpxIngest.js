@@ -16,15 +16,13 @@ const GPX_TYPE_TO_SPORT = {
     biking: 'Ride',
     ride: 'Ride',
     mountain_biking: 'MountainBikeRide',
-    swimming: 'Swim',
-    swim: 'Swim',
     hiking: 'Hike',
     hike: 'Hike',
     walking: 'Walk',
     walk: 'Walk',
 };
 
-const GENERIC_NAME_PATTERN = /^(run|ride|cycling|swim|walk|hike|activity|workout)$/i;
+const GENERIC_NAME_PATTERN = /^(run|ride|cycling|walk|hike|activity|workout)$/i;
 
 const MONTHS_IT = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic'];
 
@@ -54,7 +52,7 @@ function classifySportType(gpxType) {
 }
 
 // Only validated against running GPX files so far (see LOCAL_GPX_MIGRATION_PLAN.md §12) — the
-// bike/swim thresholds below are a reasonable first guess, not yet exercised with real data.
+// bike threshold below are a reasonable first guess, not yet exercised with real data.
 function classifySportTypeFallback(averageSpeedMs) {
     const kmh = averageSpeedMs * 3.6;
     if (kmh >= 15) return 'Ride';
@@ -62,7 +60,7 @@ function classifySportTypeFallback(averageSpeedMs) {
 }
 
 function generateActivityName(sportType, localDate) {
-    const labels = { Run: 'Corsa', TrailRun: 'Corsa in sentiero', Ride: 'Uscita in bici', MountainBikeRide: 'Uscita in MTB', Swim: 'Nuotata', Hike: 'Escursione', Walk: 'Camminata' };
+    const labels = { Run: 'Corsa', TrailRun: 'Corsa in sentiero', Ride: 'Uscita in bici', MountainBikeRide: 'Uscita in MTB', Hike: 'Escursione', Walk: 'Camminata' };
     const label = labels[sportType] || 'Attività';
     const p = toLocalParts(localDate);
     return `${label} - ${p.day} ${MONTHS_IT[Number(p.month) - 1]} ${p.year}, ${p.hour}:${p.minute}`;

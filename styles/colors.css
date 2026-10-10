@@ -14,7 +14,6 @@
     /* SPORT COLORS */
     --color-sport-run: #2e7d32;
     --color-sport-bike: #1565c0;
-    --color-sport-swim: #00838f;
     --color-sport-hike: #7b2d26;
     --color-sport-trail: #5d4e37;
 
@@ -134,10 +133,6 @@
 
 .bg-gradient-bike {
     background: linear-gradient(135deg, #e0f2fe 0%, #ffffff 65%);
-}
-
-.bg-gradient-swim {
-    background: linear-gradient(135deg, #e0f7fa 0%, #ffffff 65%);
 }
 
 .bg-gradient-hike {

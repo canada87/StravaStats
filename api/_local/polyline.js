@@ -1,6 +1,6 @@
 // api/_local/polyline.js — Google encoded polyline algorithm (same format Strava uses for
 // activity.map.summary_polyline). js/tabs/maps.js and every standalone activity detail page
-// (js/pages/{run,bike,swim,activity}/*.js) decode this client-side to draw the route/heatmap —
+// (js/pages/{run,bike,activity}/*.js) decode this client-side to draw the route/heatmap —
 // see decodePolyline() in those files, which this is the exact inverse of.
 
 function encodeSignedNumber(num) {

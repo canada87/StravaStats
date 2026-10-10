@@ -10,7 +10,7 @@ export class ActivityTrack {
         // Metadata from Strava API
         this.activity_id = metadata.activity_id ?? null;
         this.name = metadata.name ?? 'Untitled Activity';
-        this.sport_type = metadata.sport_type ?? 'unknown';  // Run, Ride, Swim, etc.
+        this.sport_type = metadata.sport_type ?? 'unknown';  // Run, Ride, etc.
         this.start_date = metadata.start_date ?? null;       // ISO string
         this.timezone = metadata.timezone ?? 'UTC';
         this.elapsed_time = metadata.elapsed_time ?? 0;      // seconds

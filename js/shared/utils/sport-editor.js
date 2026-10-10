@@ -1,14 +1,14 @@
 // js/shared/utils/sport-editor.js
 // Lets the user manually re-classify an activity's sport from within its own detail page
-// (run.html, bike.html, swim.html, activity.html) when the GPX auto-classifier got it wrong
+// (run.html, bike.html, activity.html) when the GPX auto-classifier got it wrong
 // (e.g. a fast group ride guessed as a run by the average-speed fallback in
 // api/_local/gpxIngest.js, or vice versa). Saving redirects through activity-router.html so the
 // page always ends up on the template that matches the corrected sport.
 import { updateActivityType } from '../../services/index.js';
 
 // Every sport value the app already has pace/cadence-unit or emoji handling for
-// (see the RUN_TYPES/SWIM_TYPES/BIKE_TYPES sets in js/tabs/activities.js).
-const SPORT_TYPE_OPTIONS = ['Run', 'TrailRun', 'VirtualRun', 'Ride', 'VirtualRide', 'GravelRide', 'MountainBikeRide', 'EBikeRide', 'Swim', 'OpenWaterSwim', 'Hike', 'Walk'];
+// (see the RUN_TYPES/BIKE_TYPES sets in js/tabs/activities.js).
+const SPORT_TYPE_OPTIONS = ['Run', 'TrailRun', 'VirtualRun', 'Ride', 'VirtualRide', 'GravelRide', 'MountainBikeRide', 'EBikeRide', 'Hike', 'Walk'];
 
 function escapeHtml(value) {
     return String(value)
@@ -60,7 +60,7 @@ export function attachSportEditor(rootEl, activityId) {
         saveBtn.textContent = 'Saving...';
         try {
             await updateActivityType(activityId, newType);
-            // The page's own template (run/bike/swim/activity) is picked by sport, so a
+            // The page's own template (run/bike/activity) is picked by sport, so a
             // corrected sport needs the same routing logic activity-router.html already has —
             // simplest to just send the browser back through it.
             window.location.href = `activity-router.html?id=${encodeURIComponent(activityId)}`;

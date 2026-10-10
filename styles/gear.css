@@ -2573,54 +2573,9 @@ tbody tr:hover {
     background: #e8f4ff;
 }
 
-.swim-badge {
-    padding: 2px 8px;
-    border-radius: 6px;
-    font-size: 12px;
-    font-weight: 600;
-}
-
-.swim-badge.pool {
-    background: #0077cc20;
-    color: #0077cc;
-}
-
-.swim-badge.openwater {
-    background: #00b89420;
-    color: #00b894;
-}
-
 td,
 th {
     padding: 8px 10px;
-}
-
-.pool-badge {
-    padding: 3px 8px;
-    border-radius: 6px;
-    font-size: 11px;
-    font-weight: 600;
-    color: white;
-}
-
-/* 20m */
-.pool-20 {
-    background-color: #10b981;
-}
-
-/* 25m */
-.pool-25 {
-    background-color: #2563eb;
-}
-
-/* 50m */
-.pool-50 {
-    background-color: #7c3aed;
-}
-
-/* unknown */
-.pool-unknown {
-    background-color: #9ca3af;
 }
 
 .bike-type-badge {
@@ -2692,13 +2647,6 @@ html[data-tab-background-images='off'] .tab-content {
         linear-gradient(var(--tab-bg-overlay), var(--tab-bg-overlay)),
         url('../media/bg-bike.jpg');
 }
-
-#swim-tab.tab-content {
-    background-image:
-        linear-gradient(var(--tab-bg-overlay), var(--tab-bg-overlay)),
-        url('../media/bg-swim.jpg');
-}
-
 
 /* Legacy gear/country lists */
 .gear-list,

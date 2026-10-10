@@ -3,6 +3,8 @@
 // imports (see /api/local-import) and is served back by the /api/local-* endpoints backed by
 // api/_local/store.js. See LOCAL_GPX_MIGRATION_PLAN.md for the on-disk layout.
 
+import { clearCachedActivities } from './activity-cache.js';
+
 // Kept as 'strava_gears' (not renamed) because js/app/main.js, js/tabs/gear.js,
 // js/tabs/run-analysis.js and js/pages/gear/gear-analysis.js read this exact localStorage key
 // directly rather than through getCachedGears().
@@ -19,6 +21,18 @@ async function handleResponse(response) {
         throw new Error(`API call failed (${response.status} ${response.statusText})`);
     }
     return response.json();
+}
+
+// Any call that changes activities on the server must drop the local activity cache: the
+// dashboard serves it for up to an hour, and mutations often happen on other pages (activity
+// detail, gear) that never touch main.js's in-memory copy. Called even if the request fails,
+// since a partially-applied import/bulk edit may still have changed data on disk.
+async function invalidateActivityCache() {
+    try {
+        await clearCachedActivities();
+    } catch (error) {
+        console.warn('Failed to invalidate activity cache:', error);
+    }
 }
 
 export async function fetchAllActivities() {
@@ -50,22 +64,37 @@ export async function importGpxFiles(files) {
     for (const file of files) {
         formData.append('file', file, file.name);
     }
-    const response = await fetch('/api/local-import', { method: 'POST', body: formData });
+    let response;
+    try {
+        response = await fetch('/api/local-import', { method: 'POST', body: formData });
+    } finally {
+        await invalidateActivityCache();
+    }
     return handleResponse(response);
 }
 
 export async function updateActivityType(activityId, type) {
-    const response = await fetch('/api/local-activity', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: activityId, type }),
-    });
+    let response;
+    try {
+        response = await fetch('/api/local-activity', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: activityId, type }),
+        });
+    } finally {
+        await invalidateActivityCache();
+    }
     const result = await handleResponse(response);
     return result.activity;
 }
 
 export async function deleteActivity(activityId) {
-    const response = await fetch(`/api/local-activity?id=${encodeURIComponent(activityId)}`, { method: 'DELETE' });
+    let response;
+    try {
+        response = await fetch(`/api/local-activity?id=${encodeURIComponent(activityId)}`, { method: 'DELETE' });
+    } finally {
+        await invalidateActivityCache();
+    }
     return handleResponse(response);
 }
 
@@ -96,16 +125,26 @@ export async function retireGear(gearId) {
 }
 
 export async function deleteGearPermanently(gearId) {
-    const response = await fetch(`/api/local-gear?id=${encodeURIComponent(gearId)}&hard=true`, { method: 'DELETE' });
+    let response;
+    try {
+        response = await fetch(`/api/local-gear?id=${encodeURIComponent(gearId)}&hard=true`, { method: 'DELETE' });
+    } finally {
+        await invalidateActivityCache(); // clears gear_id on activities that used it
+    }
     return handleResponse(response);
 }
 
 export async function bulkAssignGear(gearId, dateFrom, dateTo) {
-    const response = await fetch('/api/local-gear', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'bulk-assign', gearId, dateFrom, dateTo }),
-    });
+    let response;
+    try {
+        response = await fetch('/api/local-gear', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'bulk-assign', gearId, dateFrom, dateTo }),
+        });
+    } finally {
+        await invalidateActivityCache();
+    }
     return handleResponse(response);
 }
 

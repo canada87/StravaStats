@@ -428,7 +428,7 @@
 }
 
 /* ─── TSS Chart ─────────────────────────────── */
-#tss-bar-chart {
+#volume-bar-chart {
     max-height: 250px;
     aspect-ratio: 21 / 7;
 }
@@ -703,14 +703,14 @@
         line-height: 1.15;
     }
 
-    #dashboard-tab .tss-unit-selector {
+    #dashboard-tab .volume-unit-selector {
         display: grid;
         grid-template-columns: 1fr;
         gap: 0.45rem;
         margin-bottom: 0.7rem !important;
     }
 
-    #dashboard-tab .tss-unit-selector label {
+    #dashboard-tab .volume-unit-selector label {
         display: flex;
         align-items: center;
         gap: 0.45rem;

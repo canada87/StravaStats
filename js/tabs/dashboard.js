@@ -1,11 +1,11 @@
 import * as utils from './utils.js';
 
-let selectedRangeDays = 'alltime'; // default to All Time
+let selectedRangeDays = 'alltime'; // 'alltime' | 'year:YYYY' | 'custom'
 let customDateFromIso = null;
 let customDateToIso = null;
 const dashboardMemo = new Map();
 let lastActivitiesRef = null;
-let tssUnit = 'tss'; // unit for TSS chart: 'tss', 'activities', or 'hours'
+let volumeUnit = 'km'; // unit for the volume chart: 'km', 'activities', or 'hours'
 let acuteLoadBandMode = 'aggressive'; // always aggressive, no user selection
 let readinessTimelineMetric = 'readiness';
 const READINESS_HRV_STORAGE_KEY = 'dashboard_readiness_hrv';
@@ -14,18 +14,6 @@ let dashboardRenderContext = {
     dateFilterFrom: null,
     dateFilterTo: null
 };
-
-const RANGE_OPTIONS = [
-    { label: 'This Week', type: 'week' },
-    { label: 'Last 7 Days', type: 'last7' },
-    { label: 'This Month', type: 'month' },
-    { label: 'Last 30 Days', type: 'last30' },
-    { label: 'Last 3 Months', type: 'last3m' },
-    { label: 'Last 6 Months', type: 'last6m' },
-    { label: 'This Year', type: 'year' },
-    { label: 'Last 365 Days', type: 'last365' },
-    { label: 'All Time', type: 'alltime' }
-];
 
 function toLocalYMD(date) {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -366,6 +354,32 @@ function addDays(date, days) {
     return next;
 }
 
+function getSelectedYear() {
+    const match = /^year:(\d{4})$/.exec(selectedRangeDays);
+    return match ? Number(match[1]) : null;
+}
+
+function getAvailableYears(activities) {
+    const years = new Set();
+    (activities || []).forEach(activity => {
+        const year = Number(String(activity?.start_date_local || '').slice(0, 4));
+        if (Number.isFinite(year) && year > 0) years.add(year);
+    });
+    return [...years].sort((a, b) => b - a);
+}
+
+function getEarliestActivityDate(activities, fallback) {
+    let earliest = null;
+    (activities || []).forEach(activity => {
+        if (!activity?.start_date_local) return;
+        const date = new Date(activity.start_date_local);
+        if (!isNaN(date) && (!earliest || date < earliest)) earliest = date;
+    });
+    const start = new Date(earliest || fallback);
+    start.setHours(0, 0, 0, 0);
+    return start;
+}
+
 function getEffectiveDashboardWindow(dateFilterFrom, dateFilterTo) {
     const now = new Date();
     if (selectedRangeDays === 'custom' && customDateFromIso && customDateToIso) {
@@ -375,13 +389,20 @@ function getEffectiveDashboardWindow(dateFilterFrom, dateFilterTo) {
             return { startDate: customStart, endDate: customEnd };
         }
     }
-    const startDate = getRangeStartDate(selectedRangeDays);
+
+    const year = getSelectedYear();
+    let effectiveStart;
+    let effectiveEnd = new Date(now);
+    if (year) {
+        effectiveStart = new Date(year, 0, 1);
+        const endOfYear = new Date(year, 11, 31, 23, 59, 59, 999);
+        if (endOfYear < effectiveEnd) effectiveEnd = endOfYear;
+    } else {
+        effectiveStart = getEarliestActivityDate(dashboardRenderContext.allActivities, now);
+    }
+
     const minDate = parseDateInput(dateFilterFrom);
     const maxDate = parseDateInput(dateFilterTo, true);
-    let effectiveStart = new Date(startDate);
-    let effectiveEnd = new Date(now);
-
-    effectiveStart.setHours(0, 0, 0, 0);
 
     if (minDate && minDate > effectiveStart) {
         effectiveStart = minDate;
@@ -399,75 +420,24 @@ function getEffectiveDashboardWindow(dateFilterFrom, dateFilterTo) {
     return { startDate: effectiveStart, endDate: effectiveEnd };
 }
 
-function getRangeStartDate(rangeType) {
-    const now = new Date();
-    let startDate;
-
-    switch (rangeType) {
-        case 'week': {
-            const currentDay = now.getDay();
-            const diffToMonday = currentDay === 0 ? -6 : 1 - currentDay;
-            startDate = new Date(now);
-            startDate.setDate(now.getDate() + diffToMonday);
-            startDate.setHours(0, 0, 0, 0);
-            break;
-        }
-        case 'alltime': {
-            const earliestActivity = (dashboardRenderContext.allActivities || [])
-                .filter(activity => activity?.start_date_local)
-                .sort((a, b) => new Date(a.start_date_local || 0) - new Date(b.start_date_local || 0))[0];
-            startDate = earliestActivity
-                ? new Date(earliestActivity.start_date_local)
-                : new Date(now);
-            startDate.setHours(0, 0, 0, 0);
-            break;
-        }
-        case 'month': {
-            startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-            startDate.setHours(0, 0, 0, 0);
-            break;
-        }
-        case 'year': {
-            startDate = new Date(now.getFullYear(), 0, 1);
-            startDate.setHours(0, 0, 0, 0);
-            break;
-        }
-        case 'last7': {
-            startDate = new Date(now);
-            startDate.setDate(now.getDate() - 7);
-            break;
-        }
-        case 'last30': {
-            startDate = new Date(now);
-            startDate.setDate(now.getDate() - 30);
-            break;
-        }
-        case 'last3m': {
-            startDate = new Date(now);
-            startDate.setMonth(now.getMonth() - 3);
-            break;
-        }
-        case 'last6m': {
-            startDate = new Date(now);
-            startDate.setMonth(now.getMonth() - 6);
-            break;
-        }
-        case 'last365': {
-            startDate = new Date(now);
-            startDate.setDate(now.getDate() - 365);
-            break;
-        }
-        default: {
-            startDate = new Date(now);
-            startDate.setDate(now.getDate() - 30);
-        }
+/**
+ * Period the selected window is compared against: the same span of the previous year when
+ * a year is selected (so a partial current year is not compared to a full one), otherwise
+ * the window of equal length immediately before it.
+ */
+function getPreviousWindow(startDate, endDate) {
+    if (getSelectedYear()) {
+        const previousStart = new Date(startDate);
+        previousStart.setFullYear(previousStart.getFullYear() - 1);
+        const previousEnd = new Date(endDate);
+        previousEnd.setFullYear(previousEnd.getFullYear() - 1);
+        return { previousStartDate: previousStart, previousEndDate: previousEnd };
     }
-
-    return startDate;
-}
-
-function getRangeLabel(rangeType) {
-    return RANGE_OPTIONS.find(r => r.type === rangeType)?.label || 'Last 30 Days';
+    const windowMs = Math.max(24 * 3600 * 1000, endDate.getTime() - startDate.getTime());
+    return {
+        previousStartDate: new Date(startDate.getTime() - windowMs),
+        previousEndDate: new Date(startDate.getTime() - 1)
+    };
 }
 
 function getSportKey(type = '') {
@@ -1284,18 +1254,19 @@ function getTodaysActivities(sortedActivities) {
 }
 
 /**
- * Setup event listeners for TSS unit selector (only once)
+ * Setup event listeners for the volume unit selector (only once)
  */
-function setupTSSUnitSelector() {
-    const selector = document.querySelector('.tss-unit-selector');
+function setupVolumeUnitSelector() {
+    const selector = document.querySelector('.volume-unit-selector');
     if (!selector || selector.dataset.listenerReady) return;
     selector.dataset.listenerReady = '1';
 
-    const radios = selector.querySelectorAll('input[name="tss-unit"]');
+    const radios = selector.querySelectorAll('input[name="volume-unit"]');
     radios.forEach(radio => {
         radio.addEventListener('change', (e) => {
-            tssUnit = e.target.value;
-            renderTSSBarChart(dashboardRenderContext.allActivities, selectedRangeDays);
+            volumeUnit = e.target.value;
+            const { volumeChart } = dashboardRenderContext;
+            if (volumeChart) renderVolumeBarChart(volumeChart.activities, volumeChart.startDate, volumeChart.endDate);
         });
     });
 }
@@ -1321,7 +1292,12 @@ function renderRangeSelector() {
     const fromDisplay = customDateFromIso ? utils.isoToDisplayDate(customDateFromIso) : '';
     const toDisplay = customDateToIso ? utils.isoToDisplayDate(customDateToIso) : '';
 
-    container.innerHTML = RANGE_OPTIONS.map(r => `
+    const rangeOptions = [
+        { label: 'All Time', type: 'alltime' },
+        ...getAvailableYears(dashboardRenderContext.allActivities).map(year => ({ label: String(year), type: `year:${year}` }))
+    ];
+
+    container.innerHTML = rangeOptions.map(r => `
         <button
             class="range-btn ${r.type === selectedRangeDays ? 'active' : ''}"
             data-type="${r.type}">
@@ -1384,7 +1360,7 @@ function renderDashboardContent(allActivities, dateFilterFrom, dateFilterTo) {
     }
 
     const { startDate, endDate } = getEffectiveDashboardWindow(dateFilterFrom, dateFilterTo);
-    const memoKey = `${startDate.getTime()}|${endDate.getTime()}|${dateFilterFrom || ''}|${dateFilterTo || ''}`;
+    const memoKey = `${selectedRangeDays}|${startDate.getTime()}|${endDate.getTime()}|${dateFilterFrom || ''}|${dateFilterTo || ''}`;
 
     let cached = dashboardMemo.get(memoKey);
     if (!cached) {
@@ -1393,9 +1369,7 @@ function renderDashboardContent(allActivities, dateFilterFrom, dateFilterTo) {
             .filter(a => a.type && a.type.includes('Run'))
             .sort((a, b) => new Date(a.start_date_local || 0) - new Date(b.start_date_local || 0));
 
-        const windowMs = Math.max(24 * 3600 * 1000, endDate.getTime() - startDate.getTime());
-        const previousStartDate = new Date(startDate.getTime() - windowMs);
-        const previousEndDate = new Date(startDate.getTime() - 1);
+        const { previousStartDate, previousEndDate } = getPreviousWindow(startDate, endDate);
 
         const recentRuns = runs.filter(r => {
             const d = new Date(r.start_date_local);
@@ -1422,6 +1396,7 @@ function renderDashboardContent(allActivities, dateFilterFrom, dateFilterTo) {
     }
 
     const { recentRuns, previousRuns, recentActivities, previousActivities } = cached;
+    dashboardRenderContext.volumeChart = { activities: recentActivities, startDate, endDate };
 
     renderDashboardTopline(recentActivities);
     renderDashboardSummary(recentActivities, previousActivities, recentRuns, previousRuns);
@@ -1430,8 +1405,8 @@ function renderDashboardContent(allActivities, dateFilterFrom, dateFilterTo) {
     requestAnimationFrame(() => {
         renderTrainingReadiness(allActivities, startDate, endDate);
         renderAcuteLoadChart(allActivities, startDate, endDate);
-        renderTSSBarChart(recentActivities, selectedRangeDays);
-        setupTSSUnitSelector();
+        renderVolumeBarChart(recentActivities, startDate, endDate);
+        setupVolumeUnitSelector();
         renderGoalsSectionAdvanced(allActivities);
     });
 }
@@ -1515,37 +1490,42 @@ function renderDashboardSummary(currentActivities, previousActivities, currentRu
     const hrTrend = trendVisual('hr', hrChange);
     const tssTrend = trendVisual('load', tssChange);
 
+    // No comparable previous period (e.g. All Time) → no trend line at all
+    const trendLine = trend => trend.label === 'N/A'
+        ? ''
+        : `<small><span style="color:${trend.color};">${trend.icon} ${trend.label}</span></small>`;
+
 
     // --- Renderizado ---
     container.innerHTML = `
         <div class="card">
             <h3>Total Distance</h3>
             <p style="font-size:2rem;font-weight:bold;color:#0074D9;">${totalDistance.toFixed(1)} km</p>
-            <small><span style="color:${distTrend.color};">${distTrend.icon} ${distTrend.label}</span></small>
+            ${trendLine(distTrend)}
         </div>
 
         <div class="card">
             <h3>Total Moving Time</h3>
             <p style="font-size:2rem;font-weight:bold;color:#B10DC9;">${totalTime.toFixed(1)} h</p>
-            <small><span style="color:${timeTrend.color};">${timeTrend.icon} ${timeTrend.label}</span></small>
+            ${trendLine(timeTrend)}
         </div>
 
         <div class="card">
             <h3>Total Elevation Gain</h3>
             <p style="font-size:2rem;font-weight:bold;color:#2ECC40;">${totalElevation.toFixed(0)} m</p>
-            <small><span style="color:${elevTrend.color};">${elevTrend.icon} ${elevTrend.label}</span></small>
+            ${trendLine(elevTrend)}
         </div>
 
         <div class="card">
             <h3>Injury Risk Index</h3>
             <p style="font-size:2rem;font-weight:bold;color:#FF4136;">${Number.isFinite(currentInjury) ? currentInjury.toFixed(3) : '–'}</p>
-            <small><span style="color:${injuryTrend.color};">${injuryTrend.icon} ${injuryTrend.label}</span></small>
+            ${trendLine(injuryTrend)}
         </div>
 
         <div class="card">
             <h3>Average Heart Rate</h3>
             <p style="font-size:2rem;font-weight:bold;color:#FF4136;">${Number.isFinite(currentAvgHR) ? currentAvgHR.toFixed(0) : '–'} bpm</p>
-            <small><span style="color:${hrTrend.color};">${hrTrend.icon} ${hrTrend.label}</span></small>
+            ${trendLine(hrTrend)}
         </div>
         
     `;
@@ -2956,95 +2936,23 @@ function renderAcuteLoadChart(activities, rangeStart, rangeEnd) {
 
 
 /**
- * Renderiza una gr→fica de barras: TSS por per→odo
+ * Renders the stacked bar chart of training volume (km / activities / hours) per period
  */
-function renderTSSBarChart(activities, rangeType) {
-    const canvas = document.getElementById('tss-bar-chart');
+function renderVolumeBarChart(activities, startDate, endDate) {
+    const canvas = document.getElementById('volume-bar-chart');
     if (!canvas) return;
 
     const ctx = canvas.getContext('2d');
-    if (window.tssBarChart) window.tssBarChart.destroy();
+    if (window.volumeBarChart) window.volumeBarChart.destroy();
 
-    // Calcular las fechas de inicio y fin del per→odo seleccionado
-    const now = new Date();
-    let startDate;
-    let endDate = new Date(now);
-    endDate.setHours(23, 59, 59, 999);
-
-    switch (rangeType) {
-        case 'week': {
-            const today = new Date();
-            const day = today.getDay(); // 0 = domingo, 1 = lunes...
-            const diffToMonday = day === 0 ? -6 : 1 - day; // si es domingo, retrocede 6
-            startDate = new Date(today);
-            startDate.setDate(today.getDate() + diffToMonday);
-            startDate.setHours(0, 0, 0, 0);
-
-            endDate = new Date(startDate);
-            endDate.setDate(startDate.getDate() + 6); // lunes + 6 = domingo
-            endDate.setHours(23, 59, 59, 999);
-            break;
-        }
-
-        case 'month': {
-            const today = new Date();
-            startDate = new Date(today.getFullYear(), today.getMonth(), 1); // 1 del mes actual
-            endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0); // →ltimo del mes actual
-            endDate.setHours(23, 59, 59, 999);
-            break;
-        }
-
-
-        case 'year': {
-            startDate = new Date(now.getFullYear(), 0, 1);
-            startDate.setHours(0, 0, 0, 0);
-            break;
-        }
-        case 'last7': {
-            startDate = new Date(now);
-            startDate.setDate(now.getDate() - 6);
-            startDate.setHours(0, 0, 0, 0);
-            break;
-        }
-        case 'last30': {
-            startDate = new Date(now);
-            startDate.setDate(now.getDate() - 29);
-            startDate.setHours(0, 0, 0, 0);
-            break;
-        }
-        case 'last3m': {
-            startDate = new Date(now);
-            startDate.setMonth(now.getMonth() - 3);
-            startDate.setHours(0, 0, 0, 0);
-            break;
-        }
-        case 'last6m': {
-            startDate = new Date(now);
-            startDate.setMonth(now.getMonth() - 6);
-            startDate.setHours(0, 0, 0, 0);
-            break;
-        }
-        case 'last365': {
-            startDate = new Date(now);
-            startDate.setDate(now.getDate() - 364);
-            startDate.setHours(0, 0, 0, 0);
-            break;
-        }
-        default: {
-            startDate = new Date(now);
-            startDate.setDate(now.getDate() - 30);
-            startDate.setHours(0, 0, 0, 0);
-        }
-    }
-
-    const { labels, datasets, yAxisTitle } = getTSSBarChartData(activities, rangeType, startDate, endDate, tssUnit);
+    const { labels, datasets, yAxisTitle } = getVolumeBarChartData(activities, startDate, endDate, volumeUnit);
 
     if (!labels.length || !datasets.length) {
         console.warn('No data to render');
         return;
     }
 
-    window.tssBarChart = new Chart(ctx, {
+    window.volumeBarChart = new Chart(ctx, {
         type: 'bar',
         data: {
             labels,
@@ -3069,7 +2977,7 @@ function renderTSSBarChart(activities, rangeType) {
                     stacked: true,
                     beginAtZero: true,
                     title: { display: true, text: yAxisTitle },
-                    ticks: { precision: 0 }
+                    ticks: { precision: volumeUnit === 'activities' ? 0 : undefined }
                 }
             }
         }
@@ -3077,17 +2985,29 @@ function renderTSSBarChart(activities, rangeType) {
 }
 
 /**
- * Helper function to get TSS/Activities/Hours data grouped by period
+ * Bar granularity picked from the span of the selected window, so any range
+ * (a single month, a year, a custom range, all time) gets a readable number of bars.
  */
-function getTSSBarChartData(activities, rangeType, startDate, endDate, unit) {
-    // For All Time, use quarterly aggregation
-    if (rangeType === 'alltime') {
-        return getTSSBarChartDataQuarterly(activities, unit);
+function getVolumeGranularity(startDate, endDate) {
+    const spanDays = (endDate.getTime() - startDate.getTime()) / 86400000;
+    if (spanDays <= 62) return 'daily';
+    if (spanDays <= 210) return 'weekly';
+    if (spanDays <= 800) return 'monthly';
+    return 'quarterly';
+}
+
+/**
+ * Helper function to get Kilometers/Activities/Hours data grouped by period
+ */
+function getVolumeBarChartData(activities, startDate, endDate, unit) {
+    const granularity = getVolumeGranularity(startDate, endDate);
+    if (granularity === 'quarterly') {
+        return getVolumeBarChartDataQuarterly(activities, unit);
     }
 
-    const isDaily = rangeType === 'week' || rangeType === 'last7' || rangeType === 'month' || rangeType === 'last30';
-    const isWeekly = rangeType === 'last3m' || rangeType === 'last6m';
-    const isMonthly = rangeType === 'year' || rangeType === 'last365';
+    const isDaily = granularity === 'daily';
+    const isWeekly = granularity === 'weekly';
+    const isMonthly = granularity === 'monthly';
 
     const sports = ['Run', 'Ride', 'Gym'];
     const sportColors = {
@@ -3101,6 +3021,7 @@ function getTSSBarChartData(activities, rangeType, startDate, endDate, unit) {
     const minDate = new Date(startDate);
     const maxDate = new Date(endDate);
     let curr = new Date(minDate);
+    if (isMonthly) curr.setDate(1); // step month by month from the 1st, never skipping short months
 
     // Crear todos los periodos del rango (incluso sin datos)
     let guard = 0;
@@ -3152,8 +3073,8 @@ function getTSSBarChartData(activities, rangeType, startDate, endDate, unit) {
                 const sport = getSportKey(a.type || '');
 
                 let value = 0;
-                if (unit === 'tss') {
-                    value = a.tss ?? (a.suffer_score ? a.suffer_score * 1.05 : 0);
+                if (unit === 'km') {
+                    value = (a.distance || 0) / 1000;
                 } else if (unit === 'activities') {
                     value = 1;
                 } else if (unit === 'hours') {
@@ -3192,8 +3113,8 @@ function getTSSBarChartData(activities, rangeType, startDate, endDate, unit) {
     });
 
     let formatFn = v => Math.round(v);
-    if (unit === 'hours') {
-        formatFn = v => v.toFixed(1);
+    if (unit === 'km' || unit === 'hours') {
+        formatFn = v => +v.toFixed(1);
     }
 
     const datasets = sports
@@ -3207,7 +3128,7 @@ function getTSSBarChartData(activities, rangeType, startDate, endDate, unit) {
         }))
         .filter(dataset => dataset.data.some(value => value > 0));
 
-    let yAxisTitle = 'TSS';
+    let yAxisTitle = 'Kilometers';
     if (unit === 'activities') {
         yAxisTitle = 'Activities';
     } else if (unit === 'hours') {
@@ -3218,9 +3139,9 @@ function getTSSBarChartData(activities, rangeType, startDate, endDate, unit) {
 }
 
 /**
- * Get TSS bar chart data with QUARTERLY aggregation for All Time range
+ * Get volume bar chart data with QUARTERLY aggregation for All Time range
  */
-function getTSSBarChartDataQuarterly(activities, unit) {
+function getVolumeBarChartDataQuarterly(activities, unit) {
     const sports = ['Run', 'Ride', 'Gym'];
     const sportColors = {
         Run: '#ff7f50',
@@ -3255,8 +3176,8 @@ function getTSSBarChartDataQuarterly(activities, unit) {
             const sport = getSportKey(a.type || '');
             let value = 0;
 
-            if (unit === 'tss') {
-                value = a.tss ?? (a.suffer_score ? a.suffer_score * 1.05 : 0);
+            if (unit === 'km') {
+                value = (a.distance || 0) / 1000;
             } else if (unit === 'activities') {
                 value = 1;
             } else if (unit === 'hours') {
@@ -3277,8 +3198,8 @@ function getTSSBarChartDataQuarterly(activities, unit) {
     });
 
     let formatFn = v => Math.round(v);
-    if (unit === 'hours') {
-        formatFn = v => v.toFixed(1);
+    if (unit === 'km' || unit === 'hours') {
+        formatFn = v => +v.toFixed(1);
     }
 
     const datasets = sports
@@ -3292,7 +3213,7 @@ function getTSSBarChartDataQuarterly(activities, unit) {
         }))
         .filter(dataset => dataset.data.some(value => value > 0));
 
-    let yAxisTitle = 'TSS';
+    let yAxisTitle = 'Kilometers';
     if (unit === 'activities') {
         yAxisTitle = 'Activities';
     } else if (unit === 'hours') {

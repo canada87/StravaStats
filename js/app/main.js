@@ -4,6 +4,7 @@ import { setupDashboard, showLoading, hideLoading, handleError, } from './ui.js'
 import {
     renderRunAnalysisTab,
     renderBikeAnalysisTab,
+    isRideActivity,
     renderDashboardTab,
     renderTrendsTab,
     renderPlannerTab,
@@ -409,24 +410,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- YEAR FILTER BUTTONS ---
     function setupYearlySelector() {
-        const yearsToShow = 5;
-
         // Setup for Run Tab
         const runContainer = document.getElementById('year-filter-buttons');
         const bikeContainer = document.getElementById('bike-year-filter-buttons');
 
         if ((runContainer || bikeContainer) && allActivities.length === 0) return;
 
-        const years = [...new Set(allActivities.map(a => a.start_date_local.substring(0, 4)))]
-            .sort((a, b) => b - a);
-
-        const yearButtonsHTML = years.slice(0, yearsToShow).map(year =>
-            `<button class="year-btn" data-year="${year}">${year}</button>`
-        ).join('');
+        // Every year in which the sport was practised (not only the latest few), newest first
+        const yearButtonsFor = isSport => {
+            const years = [...new Set(allActivities.filter(isSport).map(a => a.start_date_local.substring(0, 4)))]
+                .sort((a, b) => b - a);
+            return years.map(year => `<button class="year-btn" data-year="${year}">${year}</button>`).join('');
+        };
 
         // Populate both containers
-        if (runContainer) runContainer.innerHTML = yearButtonsHTML;
-        if (bikeContainer) bikeContainer.innerHTML = yearButtonsHTML;
+        if (runContainer) runContainer.innerHTML = yearButtonsFor(a => a.type && a.type.includes('Run'));
+        if (bikeContainer) bikeContainer.innerHTML = yearButtonsFor(isRideActivity);
 
         // Setup event listeners for Run Tab
         if (runContainer) {

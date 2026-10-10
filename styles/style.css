@@ -539,6 +539,10 @@ main {
     gap: 0.75rem;
 }
 
+.year-buttons {
+    flex-wrap: wrap;
+}
+
 .year-buttons button {
     background-color: #e9ecef;
     color: var(--text-medium);

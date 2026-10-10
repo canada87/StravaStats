@@ -45,20 +45,25 @@ function bikeTypeBadge(r) {
 // MAIN ENTRY
 // ------------------------
 
+const RIDE_SPORT_TYPES = new Set([
+    'Ride', 'MountainBikeRide', 'GravelBikeRide',
+    'EBikeRide', 'EMountainBikeRide', 'EGravelBikeRide',
+    'VirtualRide', 'IndoorRide'
+]);
+const RIDE_TYPES = new Set(['Ride', 'VirtualRide', 'EBikeRide']);
+
+/** True for the activities the Bike tab analyses. */
+export function isRideActivity(activity) {
+    return RIDE_TYPES.has(activity.type) || RIDE_SPORT_TYPES.has(activity.sport_type);
+}
+
 export function renderBikeAnalysisTab(allActivities, dateFilterFrom, dateFilterTo, gearFilter = 'all', rollingWindowWeeks = 26) {
 
     const filteredActivities =
         utils.filterActivitiesByDate(allActivities, dateFilterFrom, dateFilterTo);
 
-    const rideSportTypes = new Set([
-        'Ride', 'MountainBikeRide', 'GravelBikeRide',
-        'EBikeRide', 'EMountainBikeRide', 'EGravelBikeRide',
-        'VirtualRide', 'IndoorRide'
-    ]);
-    const rideTypes = new Set(['Ride', 'VirtualRide', 'EBikeRide']);
-
     const rides = filteredActivities
-        .filter(a => rideTypes.has(a.type) || rideSportTypes.has(a.sport_type))
+        .filter(isRideActivity)
         .filter(a => gearFilter === 'all' || a.gear_id === gearFilter);
 
     console.log("Rendering bike analysis for", rides.length, "rides");

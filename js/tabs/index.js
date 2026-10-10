@@ -1,5 +1,5 @@
 export { renderRunAnalysisTab } from './run-analysis.js';
-export { renderBikeAnalysisTab } from './bike-analysis.js';
+export { renderBikeAnalysisTab, isRideActivity } from './bike-analysis.js';
 export { renderDashboardTab } from './dashboard.js';
 export { renderTrendsTab } from './athlete.js';
 export { renderPlannerTab } from './planner.js';

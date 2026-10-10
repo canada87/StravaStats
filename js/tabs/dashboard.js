@@ -8,7 +8,6 @@ let lastActivitiesRef = null;
 let volumeUnit = 'km'; // unit for the volume chart: 'km', 'activities', or 'hours'
 let acuteLoadBandMode = 'aggressive'; // always aggressive, no user selection
 let readinessTimelineMetric = 'readiness';
-const READINESS_HRV_STORAGE_KEY = 'dashboard_readiness_hrv';
 let dashboardRenderContext = {
     allActivities: [],
     dateFilterFrom: null,
@@ -18,328 +17,6 @@ let dashboardRenderContext = {
 function toLocalYMD(date) {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
-
-function normalizeTextToken(value = '') {
-    return value
-        .toString()
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .trim()
-        .toLowerCase();
-}
-
-function splitCsvLine(line, delimiter) {
-    const values = [];
-    let current = '';
-    let inQuotes = false;
-
-    for (let index = 0; index < line.length; index++) {
-        const char = line[index];
-        const next = line[index + 1];
-
-        if (char === '"') {
-            if (inQuotes && next === '"') {
-                current += '"';
-                index++;
-            } else {
-                inQuotes = !inQuotes;
-            }
-            continue;
-        }
-
-        if (char === delimiter && !inQuotes) {
-            values.push(current.trim());
-            current = '';
-            continue;
-        }
-
-        current += char;
-    }
-
-    values.push(current.trim());
-    return values;
-}
-
-function detectCsvDelimiter(line = '') {
-    const candidates = [',', ';', '\t'];
-    let best = ',';
-    let bestCount = -1;
-
-    candidates.forEach(delimiter => {
-        const count = splitCsvLine(line, delimiter).length;
-        if (count > bestCount) {
-            best = delimiter;
-            bestCount = count;
-        }
-    });
-
-    return best;
-}
-
-function parseLooseNumber(value) {
-    if (value == null) return null;
-    const cleaned = String(value)
-        .trim()
-        .replace(/\s+/g, '')
-        .replace(/[^\d,.-]/g, '');
-    if (!cleaned) return null;
-
-    const normalized = cleaned.includes(',') && cleaned.includes('.')
-        ? cleaned.replace(/,/g, '')
-        : cleaned.replace(',', '.');
-
-    const parsed = Number.parseFloat(normalized);
-    return Number.isFinite(parsed) ? parsed : null;
-}
-
-function parseHrvRange(value) {
-    if (!value) return null;
-    const matches = String(value).match(/-?\d+(?:[.,]\d+)?/g);
-    if (!matches || matches.length < 2) return null;
-
-    const low = parseLooseNumber(matches[0]);
-    const high = parseLooseNumber(matches[1]);
-    if (!Number.isFinite(low) || !Number.isFinite(high)) return null;
-
-    return {
-        low: Math.min(low, high),
-        high: Math.max(low, high)
-    };
-}
-
-function getHrvMonthIndex(token) {
-    const normalized = normalizeTextToken(token).replace('.', '');
-    const monthMap = {
-        jan: 0, january: 0, enero: 0, ene: 0, janvier: 0, janv: 0, janeiro: 0, gennaio: 0,
-        feb: 1, february: 1, febrero: 1, fevrier: 1, fevr: 1, fevereiro: 1, febbraio: 1,
-        mar: 2, march: 2, marzo: 2, mars: 2,
-        apr: 3, april: 3, abril: 3, avr: 3, avril: 3,
-        may: 4, mayo: 4, mai: 4, maggio: 4,
-        jun: 5, june: 5, junio: 5, juin: 5, giugno: 5,
-        jul: 6, july: 6, julio: 6, juillet: 6, luglio: 6,
-        aug: 7, august: 7, agosto: 7, aout: 7, ago: 7,
-        sep: 8, sept: 8, september: 8, septiembre: 8, setembro: 8, septembre: 8, settembre: 8,
-        oct: 9, october: 9, octubre: 9, outubro: 9, octobre: 9, ottobre: 9,
-        nov: 10, november: 10, noviembre: 10, novembro: 10, novembre: 10,
-        dec: 11, december: 11, diciembre: 11, dezembro: 11, decembre: 11, dicembre: 11
-    };
-
-    return Number.isInteger(monthMap[normalized]) ? monthMap[normalized] : null;
-}
-
-function resolvePartialHrvDate(monthIndex, day, year = null) {
-    const now = new Date();
-    const resolvedYear = Number.isFinite(year) ? year : now.getFullYear();
-    let parsed = new Date(resolvedYear, monthIndex, day);
-
-    if (!Number.isFinite(year)) {
-        const futureGapDays = (parsed.getTime() - now.getTime()) / 86400000;
-        if (futureGapDays > 30) {
-            parsed = new Date(resolvedYear - 1, monthIndex, day);
-        }
-    }
-
-    parsed.setHours(0, 0, 0, 0);
-    return parsed;
-}
-
-function parseGarminHrvDate(value) {
-    if (!value) return null;
-
-    const normalized = String(value).replace(/\s+/g, ' ').trim();
-    const isoLike = normalized.match(/^(\d{4})[./-](\d{1,2})[./-](\d{1,2})$/);
-    if (isoLike) {
-        const parsed = new Date(Number(isoLike[1]), Number(isoLike[2]) - 1, Number(isoLike[3]));
-        parsed.setHours(0, 0, 0, 0);
-        return parsed;
-    }
-
-    const dayMonthYear = normalized.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})$/);
-    if (dayMonthYear) {
-        const first = Number(dayMonthYear[1]);
-        const second = Number(dayMonthYear[2]);
-        const rawYear = Number(dayMonthYear[3]);
-        const year = rawYear < 100 ? 2000 + rawYear : rawYear;
-        const isMonthFirst = first <= 12 && second > 12;
-        const day = isMonthFirst ? second : first;
-        const month = isMonthFirst ? first : second;
-        const parsed = new Date(year, month - 1, day);
-        parsed.setHours(0, 0, 0, 0);
-        return parsed;
-    }
-
-    const direct = parseDateInput(value);
-    if (direct) {
-        direct.setHours(0, 0, 0, 0);
-        return direct;
-    }
-
-    const compact = normalizeTextToken(normalized);
-
-    const monthFirst = compact.match(/^([a-z]+)\s+(\d{1,2})(?:,?\s*(\d{4}))?$/i);
-    if (monthFirst) {
-        const monthIndex = getHrvMonthIndex(monthFirst[1]);
-        const day = Number.parseInt(monthFirst[2], 10);
-        const year = monthFirst[3] ? Number.parseInt(monthFirst[3], 10) : null;
-        if (monthIndex != null && Number.isFinite(day)) {
-            return resolvePartialHrvDate(monthIndex, day, year);
-        }
-    }
-
-    const dayFirst = compact.match(/^(\d{1,2})\s+([a-z]+)(?:\s+(\d{4}))?$/i);
-    if (dayFirst) {
-        const day = Number.parseInt(dayFirst[1], 10);
-        const monthIndex = getHrvMonthIndex(dayFirst[2]);
-        const year = dayFirst[3] ? Number.parseInt(dayFirst[3], 10) : null;
-        if (monthIndex != null && Number.isFinite(day)) {
-            return resolvePartialHrvDate(monthIndex, day, year);
-        }
-    }
-
-    return null;
-}
-
-function fillMissingHrvDates(entries) {
-    if (!entries.length) return [];
-
-    const resolved = entries.map(entry => ({
-        ...entry,
-        parsedDate: entry.parsedDate instanceof Date ? new Date(entry.parsedDate) : null
-    }));
-
-    const firstKnownIndex = resolved.findIndex(entry => entry.parsedDate);
-    if (firstKnownIndex === -1) {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        return resolved.map((entry, index) => ({
-            ...entry,
-            parsedDate: addDays(today, -index)
-        }));
-    }
-
-    for (let index = firstKnownIndex - 1; index >= 0; index--) {
-        resolved[index].parsedDate = addDays(resolved[index + 1].parsedDate, 1);
-    }
-
-    for (let index = firstKnownIndex + 1; index < resolved.length; index++) {
-        if (!resolved[index].parsedDate) {
-            resolved[index].parsedDate = addDays(resolved[index - 1].parsedDate, -1);
-        }
-    }
-
-    return resolved;
-}
-
-function parseGarminHrvCsv(csvText) {
-    const lines = String(csvText || '')
-        .replace(/^\uFEFF/, '')
-        .split(/\r?\n/)
-        .map(line => line.trim())
-        .filter(Boolean);
-
-    if (lines.length < 2) {
-        throw new Error('CSV file is empty or missing data rows.');
-    }
-
-    const delimiter = detectCsvDelimiter(lines[0]);
-    const header = splitCsvLine(lines[0], delimiter).map(normalizeTextToken);
-    const dateIndex = header.findIndex(cell => /(^|\b)(fecha|date|datum|data|giorno|jour|dia|tag)(\b|$)/.test(cell));
-    const nightlyIndex = header.findIndex(cell =>
-        /(vfc|hrv)/.test(cell) && /(noche|night|overnight|nuit|notte|noite|nacht|soir|matin)?/.test(cell)
-    );
-    const referenceIndex = header.findIndex(cell => /(valor de referencia|reference|baseline|referencia|referenz|reference value|valeur de reference|valore di riferimento)/.test(cell));
-    const avg7Index = header.findIndex(cell => /(7).*(average|avg|media|moyenne|promedio|durchschnitt|media móvil|media movel|rolling)/.test(cell));
-
-    const indices = {
-        date: dateIndex >= 0 ? dateIndex : 0,
-        nightly: nightlyIndex >= 0 ? nightlyIndex : 1,
-        reference: referenceIndex >= 0 ? referenceIndex : 2,
-        avg7: avg7Index >= 0 ? avg7Index : 3
-    };
-
-    const rawEntries = [];
-    lines.slice(1).forEach(line => {
-        const cells = splitCsvLine(line, delimiter);
-        const parsedDate = parseGarminHrvDate(cells[indices.date]);
-        const nightly = parseLooseNumber(cells[indices.nightly]);
-        const reference = parseHrvRange(cells[indices.reference]);
-        const avg7 = parseLooseNumber(cells[indices.avg7]);
-
-        if (!Number.isFinite(nightly) || !reference) return;
-
-        rawEntries.push({
-            parsedDate,
-            nightly,
-            referenceLow: reference.low,
-            referenceHigh: reference.high,
-            avg7: Number.isFinite(avg7) ? avg7 : nightly
-        });
-    });
-
-    const entries = fillMissingHrvDates(rawEntries)
-        .filter(entry => entry.parsedDate)
-        .map(entry => ({
-            date: toLocalYMD(entry.parsedDate),
-            nightly: entry.nightly,
-            referenceLow: entry.referenceLow,
-            referenceHigh: entry.referenceHigh,
-            avg7: entry.avg7
-        }));
-
-    if (!entries.length) {
-        throw new Error('No Garmin HRV rows could be parsed from the CSV.');
-    }
-
-    const uniqueEntries = Array.from(new Map(entries.map(entry => [entry.date, entry])).values())
-        .sort((a, b) => a.date.localeCompare(b.date));
-
-    return {
-        importedAt: Date.now(),
-        rangeStart: uniqueEntries[0].date,
-        rangeEnd: uniqueEntries[uniqueEntries.length - 1].date,
-        entries: uniqueEntries
-    };
-}
-
-function loadStoredHrvData() {
-    try {
-        const raw = localStorage.getItem(READINESS_HRV_STORAGE_KEY);
-        if (!raw) return null;
-        const parsed = JSON.parse(raw);
-        if (!parsed || !Array.isArray(parsed.entries) || !parsed.entries.length) return null;
-        return parsed;
-    } catch {
-        return null;
-    }
-}
-
-function saveStoredHrvData(hrvData) {
-    if (!hrvData || !Array.isArray(hrvData.entries) || !hrvData.entries.length) {
-        localStorage.removeItem(READINESS_HRV_STORAGE_KEY);
-        return;
-    }
-    localStorage.setItem(READINESS_HRV_STORAGE_KEY, JSON.stringify(hrvData));
-}
-
-function getHrvLookup() {
-    const stored = loadStoredHrvData();
-    if (!stored) return null;
-
-    const byDate = new Map();
-    stored.entries.forEach(entry => {
-        if (entry?.date) {
-            byDate.set(entry.date, entry);
-        }
-    });
-
-    return {
-        meta: stored,
-        byDate
-    };
-}
-
-
-
 
 function parseDateInput(value, endOfDay = false) {
     if (!value) return null;
@@ -1636,28 +1313,6 @@ function getReadinessInjuryPenalty(injuryRisk) {
     return 0;
 }
 
-function getReadinessHrvScore(hrvEntry) {
-    if (!hrvEntry) return null;
-
-    const width = Math.max(6, (hrvEntry.referenceHigh || 0) - (hrvEntry.referenceLow || 0));
-    const nightly = hrvEntry.nightly;
-    const avg7 = Number.isFinite(hrvEntry.avg7) ? hrvEntry.avg7 : nightly;
-
-    const distanceToBand = value => {
-        if (value < hrvEntry.referenceLow) return hrvEntry.referenceLow - value;
-        if (value > hrvEntry.referenceHigh) return value - hrvEntry.referenceHigh;
-        return 0;
-    };
-
-    const nightlyDistance = distanceToBand(nightly);
-    const avgDistance = distanceToBand(avg7);
-    const nightlyScore = nightlyDistance === 0 ? 1 : Math.max(0.1, 1 - nightlyDistance / (width * 0.75 + 6));
-    const avgScore = avgDistance === 0 ? 1 : Math.max(0.1, 1 - avgDistance / (width * 0.9 + 8));
-    const stabilityScore = Math.max(0.35, 1 - Math.abs(nightly - avg7) / (width + 10));
-
-    return normalize01(avgScore * 0.5 + nightlyScore * 0.35 + stabilityScore * 0.15);
-}
-
 /**
  * Smooth readiness to prevent abrupt day-to-day spikes.
  */
@@ -1706,7 +1361,6 @@ function buildTrainingReadinessSeries(activities, rangeStart, rangeEnd) {
     const ctlValues = series.ctlDaily.filter(Number.isFinite);
     const readinessRaw = [];
     const breakdown = [];
-    const hrvLookup = getHrvLookup();
 
     for (let i = 0; i < series.labels.length; i++) {
         const label = series.labels[i];
@@ -1716,7 +1370,6 @@ function buildTrainingReadinessSeries(activities, rangeStart, rangeEnd) {
         const injury = series.riskDaily[i] || 0;
         const load7d = series.load7d[i] || 0;
         const band = getAcuteLoadBand(profile, ctl, acuteLoadBandMode);
-        const hrvEntry = hrvLookup?.byDate.get(label) || null;
 
         const tsbScore = getReadinessTsbScore(tsb, profile);
         const ctlScore = getReadinessCtlScore(ctl, ctlValues);
@@ -1725,19 +1378,14 @@ function buildTrainingReadinessSeries(activities, rangeStart, rangeEnd) {
         const bandScore = getReadinessBandScore(load7d, band);
         const loadStabilityScore = normalize01(acwrScore * 0.65 + bandScore * 0.35);
         const injuryScore = getReadinessInjuryScore(injury);
-        const hrvScore = getReadinessHrvScore(hrvEntry);
-        const weights = hrvScore == null
-            ? { tsb: 0.35, ctl: 0.25, atl: 0.20, load: 0.20, hrv: 0 }
-            : { tsb: 0.30, ctl: 0.22, atl: 0.18, load: 0.15, hrv: 0.15 };
+        const weights = { tsb: 0.35, ctl: 0.25, atl: 0.20, load: 0.20 };
 
-        // Default readiness uses TSB, CTL, ATL inverted, and load stability.
-        // HRV is blended in only when the user imports Garmin nightly HRV data.
+        // Readiness uses TSB, CTL, ATL inverted, and load stability.
         const base01 =
             weights.tsb * tsbScore +
             weights.ctl * ctlScore +
             weights.atl * (1 - atlFatigueScore) +
-            weights.load * loadStabilityScore +
-            weights.hrv * (hrvScore ?? 0);
+            weights.load * loadStabilityScore;
 
         const final01 = normalize01(base01);
 
@@ -1745,8 +1393,7 @@ function buildTrainingReadinessSeries(activities, rangeStart, rangeEnd) {
         const ctlPts = weights.ctl * 100 * ctlScore;
         const atlPts = weights.atl * 100 * (1 - atlFatigueScore);
         const loadPts = weights.load * 100 * loadStabilityScore;
-        const hrvPts = weights.hrv * 100 * (hrvScore ?? 0);
-        const basePts = tsbPts + ctlPts + atlPts + loadPts + hrvPts;
+        const basePts = tsbPts + ctlPts + atlPts + loadPts;
         const injuryPenaltyPts = 0;
 
         readinessRaw.push(final01 * 100);
@@ -1756,7 +1403,6 @@ function buildTrainingReadinessSeries(activities, rangeStart, rangeEnd) {
             atl: { value: atl, delta: atl - ctl, fatigueScore: atlFatigueScore, points: atlPts },
             load: { value: load7d, acwrScore, bandScore, score: loadStabilityScore, points: loadPts },
             injury: { value: injury, score: injuryScore, penalty: 0, penaltyPoints: injuryPenaltyPts },
-            hrv: hrvEntry ? { ...hrvEntry, score: hrvScore, points: hrvPts } : null,
             basePoints: basePts,
             weights,
             readiness: final01 * 100
@@ -1780,7 +1426,6 @@ function buildTrainingReadinessSeries(activities, rangeStart, rangeEnd) {
         tsbDaily: series.tsbDaily,
         riskDaily: series.riskDaily,
         recoveryDaily: series.recoveryDaily,
-        hrvMeta: hrvLookup?.meta || null,
         fullStart: series.fullStart,
         today: series.today,
         visibleStart: series.visibleStart,
@@ -1832,115 +1477,11 @@ function renderReadinessMetricItem(title, value, metaLine, score01, metricKey, i
     `;
 }
 
-/**
- * Combined HRV mini score + import/clear controls (6 mini scores total)
- */
-function renderReadinessHrvItem(readinessData, hrvEntry) {
-    const hasImportedHrv = Boolean(readinessData.hrvMeta?.entries?.length);
-    const isActive = readinessTimelineMetric === 'hrv';
-    const hrvLabel = hrvEntry ? `${hrvEntry.nightly.toFixed(0)} ms` : 'Not imported';
-    const hrvMetaLine = hrvEntry
-        ? `${hrvEntry.referenceLow.toFixed(0)}-${hrvEntry.referenceHigh.toFixed(0)} ref · +${hrvEntry.points.toFixed(1)} pts`
-        : formatHrvImportSummary(readinessData.hrvMeta);
-    const score01 = hrvEntry?.score ?? 0.5;
-    const tone = getReadinessMetricTone(score01);
-    const stateClass = isActive ? ' readiness-metric-item--active' : '';
-    const disabledClass = hasImportedHrv ? '' : ' readiness-metric-item--disabled';
-    const interactiveAttr = hasImportedHrv ? ' data-readiness-metric="hrv" role="button" tabindex="0"' : '';
-
-    return `
-        <div class="readiness-metric-item readiness-metric-item--switch${stateClass}${disabledClass}" style="border:1px solid ${tone.color}33;background:${tone.color}10;display:flex;flex-direction:column;gap:0.35rem;"${interactiveAttr}>
-            <div class="readiness-metric-label" style="color:${tone.color};">HRV</div>
-            <div class="readiness-metric-value">${hrvLabel}</div>
-            <small style="color:${tone.color};">${hrvMetaLine}</small>
-            <div style="display:flex;gap:0.4rem;flex-wrap:wrap;align-items:center;margin-top:0.15rem;">
-                <label style="display:inline-flex;align-items:center;justify-content:center;padding:0.35rem 0.55rem;border:1px solid #4f46e533;border-radius:999px;cursor:pointer;background:#fff;color:#2f3b52;font-size:0.7rem;font-weight:600;">
-                    <span>Import CSV</span>
-                    <input id="readiness-hrv-file" type="file" accept=".csv,text/csv" style="display:none;">
-                </label>
-                <button id="readiness-hrv-clear" type="button" style="padding:0.35rem 0.55rem;border:1px solid #d0d7e2;border-radius:999px;background:#fff;cursor:pointer;font-size:0.7rem;font-weight:600;${hasImportedHrv ? '' : 'display:none;'}">Clear</button>
-            </div>
-        </div>
-    `;
-}
-
-function renderReadinessHrvControlCard(readinessData) {
-    const hasImportedHrv = Boolean(readinessData.hrvMeta?.entries?.length);
-    return `
-        <div class="readiness-metric-item" style="border:1px solid #4f46e533;background:#4f46e510;display:flex;flex-direction:column;gap:0.45rem;">
-            <div class="readiness-metric-label" style="color:#4f46e5;">Optional HRV Input</div>
-            <small id="readiness-hrv-feedback" style="color:#4f46e5;line-height:1.35;">${formatHrvImportSummary(readinessData.hrvMeta)}</small>
-            <div style="display:flex;gap:0.4rem;flex-wrap:wrap;align-items:center;">
-                <label style="display:inline-flex;align-items:center;justify-content:center;padding:0.45rem 0.65rem;border:1px solid #4f46e533;border-radius:999px;cursor:pointer;background:#fff;color:#2f3b52;font-size:0.74rem;font-weight:600;">
-                    <span>Import CSV</span>
-                    <input id="readiness-hrv-file" type="file" accept=".csv,text/csv" style="display:none;">
-                </label>
-                <button id="readiness-hrv-clear" type="button" style="padding:0.45rem 0.65rem;border:1px solid #d0d7e2;border-radius:999px;background:#fff;cursor:pointer;font-size:0.74rem;font-weight:600;${hasImportedHrv ? '' : 'display:none;'}">Clear</button>
-            </div>
-        </div>
-    `;
-}
-
-function formatHrvImportSummary(hrvMeta) {
-    if (!hrvMeta?.entries?.length) {
-        return 'Optional: import Garmin nightly HRV CSV to blend HRV into readiness.';
-    }
-
-    return `HRV imported: ${hrvMeta.entries.length} nights · ${hrvMeta.rangeStart} to ${hrvMeta.rangeEnd}`;
-}
-
-function rerenderTrainingReadinessFromDashboardContext() {
-    if (!dashboardRenderContext?.allActivities?.length) return;
-    const { startDate, endDate } = getEffectiveDashboardWindow(
-        dashboardRenderContext.dateFilterFrom,
-        dashboardRenderContext.dateFilterTo
-    );
-    renderTrainingReadiness(dashboardRenderContext.allActivities, startDate, endDate);
-}
-
-function setupReadinessHrvControls() {
-    const fileInput = document.getElementById('readiness-hrv-file');
-    const clearButton = document.getElementById('readiness-hrv-clear');
-    const feedback = document.getElementById('readiness-hrv-feedback');
-    if (!fileInput || fileInput.dataset.listenerReady) return;
-
-    fileInput.dataset.listenerReady = '1';
-    fileInput.addEventListener('change', async event => {
-        const file = event.target.files?.[0];
-        if (!file) return;
-
-        try {
-            const text = await file.text();
-            const parsed = parseGarminHrvCsv(text);
-            saveStoredHrvData(parsed);
-            rerenderTrainingReadinessFromDashboardContext();
-        } catch (error) {
-            if (feedback) {
-                feedback.textContent = error?.message || 'Could not parse Garmin HRV CSV.';
-                feedback.style.color = '#e74c3c';
-            }
-        } finally {
-            fileInput.value = '';
-        }
-    });
-
-    if (clearButton) {
-        clearButton.addEventListener('click', () => {
-            saveStoredHrvData(null);
-            rerenderTrainingReadinessFromDashboardContext();
-        });
-    }
-}
-
 function setupReadinessMetricSwitcher(readinessData) {
     const metricItems = Array.from(document.querySelectorAll('[data-readiness-metric]'));
     if (!metricItems.length) return;
 
-    const hasHrv = readinessData.breakdown.some(part => part?.hrv);
     const allowed = new Set(['readiness', 'tsb', 'ctl', 'atl', 'injury', 'recovery']);
-    if (hasHrv) {
-        allowed.add('hrv');
-    }
     if (!allowed.has(readinessTimelineMetric)) {
         readinessTimelineMetric = 'readiness';
     }
@@ -2000,15 +1541,6 @@ function renderReadinessGauge(score, readinessData) {
     const ctlStatus = getCtlStatus(ctl, readinessData.sortedActivities, readinessData.profile);
     const atlStatus = getAtlStatus(atl, ctl);
     const tsbStatus = getTsbStatus(tsb, readinessData.profile);
-    const hrv = parts.hrv;
-    const hrvLabel = hrv ? `${hrv.nightly.toFixed(0)} ms` : 'Not imported';
-    const hrvMetaLine = hrv
-        ? `${hrv.referenceLow.toFixed(0)}-${hrv.referenceHigh.toFixed(0)} ref · +${hrv.points.toFixed(1)} pts`
-        : 'Optional Garmin CSV import';
-    const hasHrvSeries = readinessData.breakdown.some(part => part?.hrv);
-    if (readinessTimelineMetric === 'hrv' && !hasHrvSeries) {
-        readinessTimelineMetric = 'readiness';
-    }
     const injuryToneLabel = Number.isFinite(risk)
         ? `${risk <= 0.25 ? 'Low' : risk <= 0.5 ? 'Elevated' : 'High'} risk · ref only`
         : 'Reference only';
@@ -2045,21 +1577,14 @@ function renderReadinessGauge(score, readinessData) {
         ${renderReadinessMetricItem('ATL (Fatigue)', atl.toFixed(1), `${atlStatus.label} · +${parts.atl.points.toFixed(1)} pts`, 1 - parts.atl.fatigueScore, 'atl', readinessTimelineMetric === 'atl')}
         ${renderReadinessMetricItem('Injury Risk', Number.isFinite(risk) ? risk.toFixed(3) : '–', injuryToneLabel, parts.injury.score, 'injury', readinessTimelineMetric === 'injury')}
         ${renderReadinessMetricItem('Recovery Hours', `${recovery}h`, `${describeRecoveryHours(recovery, tsb).split('.')[0]}.`, normalize01(1 - (recovery / 96)), 'recovery', readinessTimelineMetric === 'recovery')}
-        ${renderReadinessHrvItem(readinessData, hrv)}
     </div>
 `;
 
     setupReadinessMetricSwitcher(readinessData);
-    setupReadinessHrvControls();
 }
 
 function getReadinessTimelineSpec(metricKey, data, visibleIndices) {
     const buildVisible = source => visibleIndices.map(index => source[index]);
-
-    const getHrvSeries = extractor => visibleIndices.map(index => {
-        const hrv = data.breakdown[index]?.hrv;
-        return hrv ? extractor(hrv) : null;
-    });
 
     const ctlValues = data.ctlDaily.filter(Number.isFinite);
     const ctlBands = buildCtlBands(ctlValues);
@@ -2225,45 +1750,6 @@ function getReadinessTimelineSpec(metricKey, data, visibleIndices) {
             yStepLarge: 8,
             clampMin: 0,
             clampMax: 100
-        };
-    }
-
-    if (metricKey === 'hrv') {
-        const nightly = getHrvSeries(hrv => hrv.nightly);
-        const lowRef = getHrvSeries(hrv => hrv.referenceLow);
-        const highRef = getHrvSeries(hrv => hrv.referenceHigh);
-        const refLowValues = lowRef.filter(Number.isFinite);
-        const refHighValues = highRef.filter(Number.isFinite);
-        const median = values => {
-            if (!values.length) return null;
-            const sorted = [...values].sort((a, b) => a - b);
-            const middle = Math.floor(sorted.length / 2);
-            return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
-        };
-        const medianLow = median(refLowValues);
-        const medianHigh = median(refHighValues);
-        return {
-            metricLabel: 'HRV',
-            valueFormatter: value => `${value.toFixed(0)} ms`,
-            primarySeries: nightly,
-            primaryLabel: 'Nightly HRV',
-            primaryColor: '#8e44ad',
-            primaryFill: 'rgba(142, 68, 173, 0.13)',
-            spanGaps: true,
-            guides: {
-                bands: Number.isFinite(medianLow) && Number.isFinite(medianHigh)
-                    ? [{ min: Math.min(medianLow, medianHigh), max: Math.max(medianLow, medianHigh), color: 'rgba(79, 70, 229, 0.08)' }]
-                    : [],
-                lines: [
-                    ...(Number.isFinite(medianLow) ? [{ value: medianLow, color: '#6c757d', dash: [6, 4], width: 1.1 }] : []),
-                    ...(Number.isFinite(medianHigh) ? [{ value: medianHigh, color: '#4f46e5', dash: [6, 4], width: 1.1 }] : [])
-                ]
-            },
-            yPaddingFactor: 0.35,
-            yPaddingMin: 4,
-            minSpan: 15,
-            yStepSmall: 2,
-            yStepLarge: 5
         };
     }
 
@@ -2461,11 +1947,6 @@ function renderReadinessTimelineChart(data) {
     const visibleAtl = visibleIndices.map(i => data.atlDaily[i]);
     const visibleTsb = visibleIndices.map(i => data.tsbDaily[i]);
 
-    const hasHrvSeries = data.breakdown.some(part => part?.hrv);
-    if (readinessTimelineMetric === 'hrv' && !hasHrvSeries) {
-        readinessTimelineMetric = 'readiness';
-    }
-
     const timelineSpec = getReadinessTimelineSpec(readinessTimelineMetric, data, visibleIndices);
     const guideValues = [
         ...(timelineSpec.guides?.lines || []).flatMap(line => Array.isArray(line.value) ? line.value : [line.value]),
@@ -2564,7 +2045,6 @@ function renderReadinessTimelineChart(data) {
                             if (!Number.isFinite(n)) return value;
                             if (readinessTimelineMetric === 'injury') return n.toFixed(2);
                             if (readinessTimelineMetric === 'recovery') return `${n.toFixed(0)}h`;
-                            if (readinessTimelineMetric === 'hrv') return `${n.toFixed(0)}ms`;
                             return n.toFixed(0);
                         }
                     },
@@ -3275,6 +2755,38 @@ function getWeekNumber(date) {
 const currentYear = new Date().getFullYear();
 const currentMonth = new Date().getMonth();
 
+// Period shown by the two goal charts. View-only state: the goals themselves stay global
+// (localStorage 'training_goals') and are not stored per year/month. Resets to "now" on reload.
+let goalAnnualYear = currentYear;
+let goalMonthlyYear = currentYear;
+let goalMonthlyMonth = currentMonth;
+
+function getGoalYears(activities) {
+    const years = new Set([currentYear, ...getAvailableYears(activities)]);
+    return [...years].sort((a, b) => b - a);
+}
+
+function renderYearOptions(years, selected) {
+    return years.map(y => `<option value="${y}" ${y === selected ? 'selected' : ''}>${y}</option>`).join('');
+}
+
+function renderMonthOptions(selected) {
+    return Array.from({ length: 12 }, (_, m) =>
+        `<option value="${m}" ${m === selected ? 'selected' : ''}>${getMonthName(m)}</option>`
+    ).join('');
+}
+
+const GOAL_SELECT_STYLE = 'padding:0.35rem 0.5rem;border:1px solid #ddd;border-radius:4px;background:#fff;';
+
+/**
+ * Outcome line for a goal chart: reached, missed (period over) or still in progress.
+ */
+function goalOutcomeBadge(total, goal, periodEnd) {
+    if (total >= goal) return '<strong style="color:#27ae60;">✅ Goal reached</strong>';
+    if (periodEnd < new Date()) return '<strong style="color:#e74c3c;">❌ Goal missed</strong>';
+    return '';
+}
+
 const GOAL_SPORTS = [
     { label: 'All', value: 'all' },
     { label: '🏃 Run', value: 'Run' },
@@ -3329,6 +2841,9 @@ export function renderGoalsSectionAdvanced(allActivities) {
     const cfg = metricConfig[metric];
     const annualGoal = goals[metric]?.annual || 1000;
     const monthlyGoal = goals[metric]?.monthly || 100;
+    const goalYears = getGoalYears(allActivities);
+    if (!goalYears.includes(goalAnnualYear)) goalAnnualYear = currentYear;
+    if (!goalYears.includes(goalMonthlyYear)) goalMonthlyYear = currentYear;
 
     if (!document.getElementById('goals-section')) {
         const goalsDiv = document.createElement('div');
@@ -3354,7 +2869,10 @@ export function renderGoalsSectionAdvanced(allActivities) {
         <!-- YEARLY GOAL -->
         <div style="flex:1;min-width:300px;background:white;padding:1.5rem;border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,0.1);">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
-                <h4 style="margin:0;">Annual Goal</h4>
+                <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+                    <h4 style="margin:0;">Annual Goal</h4>
+                    <select id="goal-annual-year" aria-label="Annual goal year" style="${GOAL_SELECT_STYLE}">${renderYearOptions(goalYears, goalAnnualYear)}</select>
+                </div>
                 <div>
                     <input type="number" id="annual-goal" value="${annualGoal}" min="1"
                            style="width:100px;padding:0.5rem;border:1px solid #ddd;border-radius:4px;">
@@ -3371,7 +2889,11 @@ export function renderGoalsSectionAdvanced(allActivities) {
         <!-- MONTHLY GOAL -->
         <div style="flex:1;min-width:300px;background:white;padding:1.5rem;border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,0.1);">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
-                <h4 style="margin:0;">Monthly Goal - ${getMonthName(currentMonth)}</h4>
+                <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+                    <h4 style="margin:0;">Monthly Goal</h4>
+                    <select id="goal-monthly-month" aria-label="Monthly goal month" style="${GOAL_SELECT_STYLE}">${renderMonthOptions(goalMonthlyMonth)}</select>
+                    <select id="goal-monthly-year" aria-label="Monthly goal year" style="${GOAL_SELECT_STYLE}">${renderYearOptions(goalYears, goalMonthlyYear)}</select>
+                </div>
                 <div>
                     <input type="number" id="monthly-goal" value="${monthlyGoal}" min="1"
                            style="width:100px;padding:0.5rem;border:1px solid #ddd;border-radius:4px;">
@@ -3426,6 +2948,20 @@ export function renderGoalsSectionAdvanced(allActivities) {
         renderGoalCharts(allActivities, g);
     };
 
+    // Period selectors only change what is displayed, never the saved goals
+    document.getElementById('goal-annual-year').onchange = event => {
+        goalAnnualYear = Number(event.target.value);
+        renderGoalCharts(allActivities, loadGoals());
+    };
+    document.getElementById('goal-monthly-month').onchange = event => {
+        goalMonthlyMonth = Number(event.target.value);
+        renderGoalCharts(allActivities, loadGoals());
+    };
+    document.getElementById('goal-monthly-year').onchange = event => {
+        goalMonthlyYear = Number(event.target.value);
+        renderGoalCharts(allActivities, loadGoals());
+    };
+
     renderGoalCharts(allActivities, goals);
 }
 
@@ -3437,15 +2973,15 @@ function renderGoalCharts(allActivities, goals) {
     const monthlyGoal = goals[metric]?.monthly || 100;
     const filteredActivities = filterActivitiesBySport(allActivities, sport);
 
-    renderAnnualChart(filteredActivities, cfg, annualGoal, sport);
-    renderMonthlyChart(filteredActivities, cfg, monthlyGoal, sport);
+    renderAnnualChart(filteredActivities, cfg, annualGoal, sport, goalAnnualYear);
+    renderMonthlyChart(filteredActivities, cfg, monthlyGoal, sport, goalMonthlyYear, goalMonthlyMonth);
 }
 
 // ==============================================
 // ANNUAL CHART
 // ==============================================
 
-function renderAnnualChart(allActivities, cfg, annualGoal, sport) {
+function renderAnnualChart(allActivities, cfg, annualGoal, sport, year) {
     const sportLabel = GOAL_SPORTS.find(s => s.value === (sport || 'all'))?.label || 'All';
 
     const labels = [];
@@ -3456,8 +2992,8 @@ function renderAnnualChart(allActivities, cfg, annualGoal, sport) {
     for (let m = 0; m < 12; m++) {
         labels.push(getMonthName(m));
 
-        const monthStart = new Date(currentYear, m, 1);
-        const monthEnd = new Date(currentYear, m + 1, 0, 23, 59, 59);
+        const monthStart = new Date(year, m, 1);
+        const monthEnd = new Date(year, m + 1, 0, 23, 59, 59);
 
         const monthActivities = allActivities.filter(a => {
             const d = new Date(a.start_date_local);
@@ -3466,18 +3002,21 @@ function renderAnnualChart(allActivities, cfg, annualGoal, sport) {
 
         const monthVal = monthActivities.reduce((sum, a) => sum + cfg.extract(a), 0);
         cumulative += monthVal;
-        actualData.push(parseFloat(cumulative.toFixed(2)));
+        // Months that have not started yet are left out so the line stops at today
+        actualData.push(monthStart > new Date() ? null : parseFloat(cumulative.toFixed(2)));
         plannedData.push(parseFloat((annualGoal / 12 * (m + 1)).toFixed(2)));
     }
 
-    const currentTotal = actualData[actualData.length - 1] || 0;
+    const currentTotal = cumulative;
     const percentage = ((currentTotal / annualGoal) * 100).toFixed(1);
     const remaining = Math.max(0, annualGoal - currentTotal).toFixed(1);
 
+    const annualOutcome = goalOutcomeBadge(currentTotal, annualGoal, new Date(year, 11, 31, 23, 59, 59));
     document.getElementById('annual-stats').innerHTML = `
         <strong>Sport:</strong> ${sportLabel}
         | <strong>Progress:</strong> ${currentTotal.toFixed(1)} / ${annualGoal} ${cfg.unit} (${percentage}%)
         | <strong>Remaining:</strong> ${remaining} ${cfg.unit}
+        ${annualOutcome ? `| ${annualOutcome}` : ''}
     `;
 
     const config = {
@@ -3535,10 +3074,10 @@ function renderAnnualChart(allActivities, cfg, annualGoal, sport) {
 // MONTHLY CHART
 // ==============================================
 
-function renderMonthlyChart(allActivities, cfg, monthlyGoal, sport) {
+function renderMonthlyChart(allActivities, cfg, monthlyGoal, sport, year, month) {
     const sportLabel = GOAL_SPORTS.find(s => s.value === (sport || 'all'))?.label || 'All';
 
-    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
     const labels = [];
     const actualData = [];
     const plannedData = [];
@@ -3547,8 +3086,8 @@ function renderMonthlyChart(allActivities, cfg, monthlyGoal, sport) {
     for (let d = 1; d <= daysInMonth; d++) {
         labels.push(d);
 
-        const dayStart = new Date(currentYear, currentMonth, d, 0, 0, 0);
-        const dayEnd = new Date(currentYear, currentMonth, d, 23, 59, 59);
+        const dayStart = new Date(year, month, d, 0, 0, 0);
+        const dayEnd = new Date(year, month, d, 23, 59, 59);
 
         const dayActivities = allActivities.filter(a => {
             const dt = new Date(a.start_date_local);
@@ -3557,18 +3096,21 @@ function renderMonthlyChart(allActivities, cfg, monthlyGoal, sport) {
 
         const dayVal = dayActivities.reduce((sum, a) => sum + cfg.extract(a), 0);
         cumulative += dayVal;
-        actualData.push(parseFloat(cumulative.toFixed(2)));
+        // Days that have not happened yet are left out so the line stops at today
+        actualData.push(dayStart > new Date() ? null : parseFloat(cumulative.toFixed(2)));
         plannedData.push(parseFloat((monthlyGoal / daysInMonth * d).toFixed(2)));
     }
 
-    const currentTotal = actualData[actualData.length - 1] || 0;
+    const currentTotal = cumulative;
     const percentage = ((currentTotal / monthlyGoal) * 100).toFixed(1);
     const remaining = Math.max(0, monthlyGoal - currentTotal).toFixed(1);
 
+    const monthlyOutcome = goalOutcomeBadge(currentTotal, monthlyGoal, new Date(year, month, daysInMonth, 23, 59, 59));
     document.getElementById('monthly-stats').innerHTML = `
         <strong>Sport:</strong> ${sportLabel}
         | <strong>Progress:</strong> ${currentTotal.toFixed(1)} / ${monthlyGoal} ${cfg.unit} (${percentage}%)
         | <strong>Remaining:</strong> ${remaining} ${cfg.unit}
+        ${monthlyOutcome ? `| ${monthlyOutcome}` : ''}
     `;
 
     const config = {

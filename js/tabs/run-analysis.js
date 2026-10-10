@@ -37,6 +37,8 @@ export function renderRunAnalysisTab(allActivities, dateFilterFrom, dateFilterTo
     renderTopRuns(runs);
     renderActivitiesTable(runs);
     renderPaceHistogram(runs);
+    renderHeartRateTimeChart(runs);
+    renderHeartRateZoneHistogram(runs);
     renderPaceHrCurveChart(runs);
     renderEfficiencyEvolutionChart(runs);
     renderDistanceEfficiencyChart(runs);
@@ -151,6 +153,186 @@ function createChart(canvasId, config) {
     config.options.maintainAspectRatio = false;
     charts[canvasId] = new Chart(canvas, config);
     return charts[canvasId];
+}
+
+// --- HEART RATE CHARTS ---
+const HR_ZONE_COLORS = ['#90a4ae', '#42a5f5', '#66bb6a', '#ffa726', '#ef5350'];
+
+function getHrZoneIndex(hr, zones) {
+    for (let i = zones.length - 1; i >= 0; i--) {
+        if (hr >= zones[i].min) return i;
+    }
+    return 0;
+}
+
+function formatHrZoneLabel(zones, i) {
+    if (i === 0) return `Z1 (<${zones[1].min} bpm)`;
+    if (i === zones.length - 1) return `Z${i + 1} (${zones[i].min}+ bpm)`;
+    return `Z${i + 1} (${zones[i].min}-${zones[i + 1].min - 1} bpm)`;
+}
+
+/** Runs that recorded a heart rate, oldest first. */
+function getRunsWithHeartRate(runs) {
+    return (runs || [])
+        .filter(r => Number(r.average_heartrate) > 0 && r.start_date_local)
+        .sort((a, b) => new Date(a.start_date_local) - new Date(b.start_date_local));
+}
+
+function showNoHeartRateData(canvasId) {
+    if (charts[canvasId]) {
+        charts[canvasId].destroy();
+        delete charts[canvasId];
+    }
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.font = '14px sans-serif';
+    ctx.fillStyle = '#999';
+    ctx.textAlign = 'center';
+    ctx.fillText('No runs with heart rate data in this period', canvas.width / 2, canvas.height / 2);
+}
+
+export function renderHeartRateTimeChart(runs) {
+    const canvasId = 'hr-time-chart';
+    const hrRuns = getRunsWithHeartRate(runs);
+    if (!hrRuns.length) {
+        showNoHeartRateData(canvasId);
+        return;
+    }
+
+    const { zones, source } = utils.getHeartRateZones();
+    const points = hrRuns.map(r => ({
+        x: new Date(r.start_date_local).getTime(),
+        y: r.average_heartrate,
+        run: r
+    }));
+    const rolling = utils.rollingMean(points.map(p => p.y), 10)
+        .map((value, i) => ({ x: points[i].x, y: +value.toFixed(1) }));
+
+    // Small margin around the data; a single run gets +-15 days so the axis stays readable
+    const firstX = points[0].x;
+    const lastX = points[points.length - 1].x;
+    const xPadding = lastX > firstX ? (lastX - firstX) * 0.03 : 15 * 24 * 3600 * 1000;
+
+    createChart(canvasId, {
+        type: 'scatter',
+        data: {
+            datasets: [
+                {
+                    label: 'Run average HR',
+                    data: points,
+                    pointRadius: 4,
+                    pointBackgroundColor: points.map(p => HR_ZONE_COLORS[Math.min(getHrZoneIndex(p.y, zones), HR_ZONE_COLORS.length - 1)]),
+                    pointBorderColor: 'rgba(0, 0, 0, 0.15)'
+                },
+                {
+                    label: 'Rolling average (10 runs)',
+                    data: rolling,
+                    type: 'line',
+                    borderColor: '#FC5200',
+                    borderWidth: 3,
+                    pointRadius: 0,
+                    tension: 0.25
+                }
+            ]
+        },
+        options: {
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        title: items => new Date(items[0].parsed.x).toLocaleDateString('default', { day: 'numeric', month: 'short', year: 'numeric' }),
+                        label: context => {
+                            if (context.datasetIndex === 1) return `Rolling average: ${context.parsed.y.toFixed(1)} bpm`;
+                            const run = context.raw.run;
+                            const zone = getHrZoneIndex(run.average_heartrate, zones) + 1;
+                            return [
+                                run.name || 'Run',
+                                `${Math.round(run.average_heartrate)} bpm · Z${zone} · ${(run.distance / 1000).toFixed(1)} km`
+                            ];
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    type: 'linear',
+                    min: firstX - xPadding,
+                    max: lastX + xPadding,
+                    ticks: {
+                        maxTicksLimit: 8,
+                        // Day + month on short ranges (month + year would repeat), month + year otherwise
+                        callback: value => new Date(value).toLocaleDateString('default',
+                            lastX - firstX <= 120 * 24 * 3600 * 1000
+                                ? { day: 'numeric', month: 'short' }
+                                : { month: 'short', year: 'numeric' })
+                    }
+                },
+                y: { title: { display: true, text: 'Average heart rate (bpm)' } }
+            }
+        }
+    });
+
+    utils.upsertChartInfo(canvasId, {
+        title: 'Average heart rate over time',
+        bodyHtml: `Each dot is a run that recorded heart rate, coloured by the zone of its average HR (${source}).<br>
+           The line is the average of the last 10 runs: a downward trend at similar effort usually means better aerobic fitness.`,
+        accentColor: '#FC5200'
+    });
+}
+
+export function renderHeartRateZoneHistogram(runs) {
+    const canvasId = 'hr-zone-histogram';
+    const hrRuns = getRunsWithHeartRate(runs);
+    if (!hrRuns.length) {
+        showNoHeartRateData(canvasId);
+        return;
+    }
+
+    const { zones, source } = utils.getHeartRateZones();
+    const binSize = 5;
+    const values = hrRuns.map(r => r.average_heartrate);
+    const firstBin = Math.floor(Math.min(...values) / binSize) * binSize;
+    const lastBin = Math.floor(Math.max(...values) / binSize) * binSize;
+    const binCount = (lastBin - firstBin) / binSize + 1;
+
+    // counts[zone][bin]: a bin that straddles a zone limit is split between the two colours
+    const counts = zones.map(() => Array(binCount).fill(0));
+    values.forEach(hr => {
+        counts[getHrZoneIndex(hr, zones)][Math.floor((hr - firstBin) / binSize)]++;
+    });
+
+    const total = values.length;
+    const datasets = zones.map((_, i) => {
+        const zoneTotal = counts[i].reduce((a, b) => a + b, 0);
+        return {
+            label: `${formatHrZoneLabel(zones, i)} · ${zoneTotal} runs (${Math.round(zoneTotal / total * 100)}%)`,
+            data: counts[i],
+            backgroundColor: HR_ZONE_COLORS[Math.min(i, HR_ZONE_COLORS.length - 1)]
+        };
+    });
+
+    createChart(canvasId, {
+        type: 'bar',
+        data: {
+            labels: Array.from({ length: binCount }, (_, i) => `${firstBin + i * binSize}-${firstBin + (i + 1) * binSize - 1}`),
+            datasets
+        },
+        options: {
+            plugins: { legend: { position: 'bottom' } },
+            scales: {
+                x: { stacked: true, title: { display: true, text: 'Average heart rate (bpm)' } },
+                y: { stacked: true, beginAtZero: true, ticks: { precision: 0 }, title: { display: true, text: '# Runs' } }
+            }
+        }
+    });
+
+    utils.upsertChartInfo(canvasId, {
+        title: 'Average heart rate distribution',
+        bodyHtml: `How many runs fall in each 5 bpm band of average heart rate, coloured by zone (${source}).<br>
+           A band that straddles a zone limit is split between the two colours. The legend shows how many runs, and what share, fall in each zone.`,
+        accentColor: '#FC5200'
+    });
 }
 
 // --- CHART RENDERING FUNCTIONS ---

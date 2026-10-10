@@ -27,6 +27,7 @@ import {
     importGpxFiles,
 } from '../services/index.js';
 import { preprocessActivities } from '../shared/preprocessing/index.js';
+import { buildHrZoneRanges } from '../shared/utils/index.js';
 
 const CACHE_VERSION = 'v2-efficiency-moving-ratio';
 
@@ -39,13 +40,8 @@ const CACHE_VERSION = 'v2-efficiency-moving-ratio';
 // renderTrainingZones() (gated on that flag, originally meant to distinguish a Strava athlete's
 // manually-tuned zones from Strava's own defaults) should treat it as configured.
 function buildHrZonesFromMaxHr(maxHr) {
-    if (!maxHr || maxHr <= 0) return null;
-    const breakpoints = [0, 0.60, 0.70, 0.80, 0.90];
-    const zones = breakpoints.map((pct, i) => ({
-        min: Math.round(maxHr * pct),
-        max: i < breakpoints.length - 1 ? Math.round(maxHr * breakpoints[i + 1]) : -1,
-    }));
-    return { heart_rate: { zones, custom_zones: true } };
+    const zones = buildHrZoneRanges(maxHr);
+    return zones ? { heart_rate: { zones, custom_zones: true } } : null;
 }
 
 function persistTrainingZones(zones) {

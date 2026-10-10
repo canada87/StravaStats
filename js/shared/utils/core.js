@@ -13,6 +13,46 @@ export function filterActivitiesByDate(activities, from, to) {
     });
 }
 
+// Heart-rate zones as % of max HR: Z1 <60, Z2 60-70, Z3 70-80, Z4 80-90, Z5 >90
+const HR_ZONE_BREAKPOINTS = [0, 0.60, 0.70, 0.80, 0.90];
+const DEFAULT_MAX_HR = 190;
+
+/**
+ * Five %maxHR zones as [{ min, max }] (bpm, last zone max = -1 for "no upper limit").
+ */
+export function buildHrZoneRanges(maxHr) {
+    if (!maxHr || maxHr <= 0) return null;
+    return HR_ZONE_BREAKPOINTS.map((pct, i) => ({
+        min: Math.round(maxHr * pct),
+        max: i < HR_ZONE_BREAKPOINTS.length - 1 ? Math.round(maxHr * HR_ZONE_BREAKPOINTS[i + 1]) : -1
+    }));
+}
+
+/**
+ * Heart-rate zones used by the app: the saved training zones when there are any, otherwise
+ * zones derived from the "Max HR" in Settings (default 190). `source` says which one was used.
+ */
+export function getHeartRateZones() {
+    try {
+        const saved = JSON.parse(localStorage.getItem('strava_training_zones') || 'null');
+        const zones = saved?.heart_rate?.zones;
+        if (Array.isArray(zones) && zones.length >= 2) {
+            return { zones, source: 'saved training zones' };
+        }
+    } catch (_e) {
+        // malformed value: fall back to Max HR
+    }
+
+    let maxHr = DEFAULT_MAX_HR;
+    try {
+        const settings = JSON.parse(localStorage.getItem('dashboard_settings') || '{}');
+        maxHr = Number(settings.hrMax) || DEFAULT_MAX_HR;
+    } catch (_e) {
+        // keep the default
+    }
+    return { zones: buildHrZoneRanges(maxHr), source: `Max HR ${maxHr} bpm (Settings)` };
+}
+
 /**
  * Period shown by the Run/Bike consistency calendar grids, following the date filter:
  * - no filter: the current year (Jan-Dec);

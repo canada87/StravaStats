@@ -13,6 +13,24 @@ export function filterActivitiesByDate(activities, from, to) {
     });
 }
 
+// Max HR the per-run VO2max estimate has always assumed
+export const VO2MAX_ESTIMATE_MAX_HR = 195;
+
+/**
+ * Per-run VO2max estimate (ml/kg/min) shown as "VO2max (est)" on the activity pages:
+ * oxygen cost of the average pace (ACSM running equation) divided by the fraction of max HR
+ * the run was done at. Returns null when it cannot be estimated (no heart rate, or an average
+ * HR outside 50-120% of the assumed max HR).
+ */
+export function estimateRunVo2max(activity, maxHr = VO2MAX_ESTIMATE_MAX_HR) {
+    if (!activity.distance || !activity.moving_time || !activity.average_heartrate) return null;
+    const velocityMPerMin = (activity.distance / activity.moving_time) * 60;
+    const vo2AtPace = velocityMPerMin * 0.2 + 3.5;
+    const fractionOfMaxHr = activity.average_heartrate / maxHr;
+    if (fractionOfMaxHr < 0.5 || fractionOfMaxHr > 1.2) return null;
+    return vo2AtPace / fractionOfMaxHr;
+}
+
 // Heart-rate zones as % of max HR: Z1 <60, Z2 60-70, Z3 70-80, Z4 80-90, Z5 >90
 const HR_ZONE_BREAKPOINTS = [0, 0.60, 0.70, 0.80, 0.90];
 const DEFAULT_MAX_HR = 190;

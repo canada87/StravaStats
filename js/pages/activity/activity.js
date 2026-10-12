@@ -4,7 +4,7 @@
  * Entry point: Query parameter ?id={activityId}
  */
 
-import { formatDate as sharedFormatDate, formatPace as sharedFormatPace, formatPaceRun } from '../../shared/utils/index.js';
+import { formatDate as sharedFormatDate, formatPace as sharedFormatPace, formatPaceRun, estimateRunVo2max } from '../../shared/utils/index.js';
 import { AdvancedActivityAnalyzer } from './advanced-analysis.js';
 import { AnalysisResultsUI } from './analysis-ui-components.js';
 import { renderWeatherAnalysis, renderWeatherMapDetails } from '../../shared/utils/weather-analysis.js';
@@ -182,13 +182,8 @@ function decodePolyline(str) {
  * Estimates VO2max from activity data using Karvonen formula
  */
 function estimateVO2max(act, userMaxHr = CONFIG.USER_MAX_HR) {
-    if (!act.distance || !act.moving_time || !act.average_heartrate) return '-';
-    const vel_m_min = (act.distance / act.moving_time) * 60;
-    const vo2_at_pace = (vel_m_min * 0.2) + 3.5;
-    const percent_max_hr = act.average_heartrate / userMaxHr;
-    if (percent_max_hr < 0.5 || percent_max_hr > 1.2) return '-';
-    const vo2max = vo2_at_pace / percent_max_hr;
-    return vo2max.toFixed(1);
+    const vo2max = estimateRunVo2max(act, userMaxHr);
+    return vo2max === null ? '-' : vo2max.toFixed(1);
 }
 
 /**

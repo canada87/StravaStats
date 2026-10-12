@@ -39,6 +39,7 @@ export function renderRunAnalysisTab(allActivities, dateFilterFrom, dateFilterTo
     renderPaceHistogram(runs);
     renderHeartRateTimeChart(runs);
     renderHeartRateZoneHistogram(runs);
+    renderVo2maxTimeChart(runs);
     renderPaceHrCurveChart(runs);
     renderEfficiencyEvolutionChart(runs);
     renderDistanceEfficiencyChart(runs);
@@ -331,6 +332,93 @@ export function renderHeartRateZoneHistogram(runs) {
         title: 'Average heart rate distribution',
         bodyHtml: `How many runs fall in each 5 bpm band of average heart rate, coloured by zone (${source}).<br>
            A band that straddles a zone limit is split between the two colours. The legend shows how many runs, and what share, fall in each zone.`,
+        accentColor: '#FC5200'
+    });
+}
+
+export function renderVo2maxTimeChart(runs) {
+    const canvasId = 'vo2max-time-chart';
+    const points = (runs || [])
+        .filter(r => r.start_date_local)
+        .map(r => ({ run: r, vo2max: utils.estimateRunVo2max(r) }))
+        .filter(p => p.vo2max !== null)
+        .sort((a, b) => new Date(a.run.start_date_local) - new Date(b.run.start_date_local))
+        .map(p => ({ x: new Date(p.run.start_date_local).getTime(), y: +p.vo2max.toFixed(1), run: p.run }));
+
+    if (!points.length) {
+        showNoHeartRateData(canvasId);
+        return;
+    }
+
+    const rolling = utils.rollingMean(points.map(p => p.y), 10)
+        .map((value, i) => ({ x: points[i].x, y: +value.toFixed(1) }));
+
+    // Small margin around the data; a single run gets +-15 days so the axis stays readable
+    const firstX = points[0].x;
+    const lastX = points[points.length - 1].x;
+    const xPadding = lastX > firstX ? (lastX - firstX) * 0.03 : 15 * 24 * 3600 * 1000;
+
+    createChart(canvasId, {
+        type: 'scatter',
+        data: {
+            datasets: [
+                {
+                    label: 'Run estimate',
+                    data: points,
+                    pointRadius: 4,
+                    pointBackgroundColor: 'rgba(25, 118, 210, 0.6)',
+                    pointBorderColor: 'rgba(25, 118, 210, 0.9)'
+                },
+                {
+                    label: 'Rolling average (10 runs)',
+                    data: rolling,
+                    type: 'line',
+                    borderColor: '#FC5200',
+                    borderWidth: 3,
+                    pointRadius: 0,
+                    tension: 0.25
+                }
+            ]
+        },
+        options: {
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        title: items => new Date(items[0].parsed.x).toLocaleDateString('default', { day: 'numeric', month: 'short', year: 'numeric' }),
+                        label: context => {
+                            if (context.datasetIndex === 1) return `Rolling average: ${context.parsed.y.toFixed(1)}`;
+                            const run = context.raw.run;
+                            return [
+                                run.name || 'Run',
+                                `VO₂max (est) ${context.parsed.y.toFixed(1)} · ${Math.round(run.average_heartrate)} bpm · ${(run.distance / 1000).toFixed(1)} km`
+                            ];
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    type: 'linear',
+                    min: firstX - xPadding,
+                    max: lastX + xPadding,
+                    ticks: {
+                        maxTicksLimit: 8,
+                        // Day + month on short ranges (month + year would repeat), month + year otherwise
+                        callback: value => new Date(value).toLocaleDateString('default',
+                            lastX - firstX <= 120 * 24 * 3600 * 1000
+                                ? { day: 'numeric', month: 'short' }
+                                : { month: 'short', year: 'numeric' })
+                    }
+                },
+                y: { title: { display: true, text: 'VO₂max (est, ml/kg/min)' } }
+            }
+        }
+    });
+
+    utils.upsertChartInfo(canvasId, {
+        title: 'VO₂max (est) over time',
+        bodyHtml: `The same estimate shown inside each run: the oxygen cost of your average pace divided by the share of max HR (${utils.VO2MAX_ESTIMATE_MAX_HR} bpm assumed) you ran at.<br>
+           It is a rough figure that also moves with heat, hills and fatigue: read the trend (orange line, average of the last 10 runs) rather than single dots.`,
         accentColor: '#FC5200'
     });
 }

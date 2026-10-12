@@ -174,7 +174,62 @@
     box-shadow: var(--shadow-md);
 }
 
+.act-counter-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+.act-selected-count {
+    font-weight: var(--font-weight-medium);
+    color: var(--color-primary);
+}
+
+.act-export-btn:disabled,
+.act-bulk-delete-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+.act-export-btn:disabled:hover {
+    background: var(--color-bg-card);
+    color: var(--color-primary);
+}
+
+.act-bulk-delete-btn {
+    padding: var(--spacing-sm) var(--spacing-md);
+    font-size: var(--font-size-sm);
+    border: 1px solid var(--color-danger, #dc2626);
+    border-radius: var(--radius-md);
+    background: var(--color-bg-card);
+    color: var(--color-danger, #dc2626);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    font-weight: var(--font-weight-medium);
+}
+
+.act-bulk-delete-btn:hover:not(:disabled) {
+    background: var(--color-danger, #dc2626);
+    color: white;
+    box-shadow: var(--shadow-md);
+}
+
 /* ─── Activities Table ─────────────────────── */
+#activities-table.df-table .act-select-cell {
+    width: 2rem;
+    text-align: center;
+}
+
+#activities-table.df-table .act-select-cell input {
+    cursor: pointer;
+}
+
+#activities-table.df-table tr.act-row-selected td {
+    background: var(--color-bg-hover);
+}
+
 #activities-table.df-table {
     width: 100%;
     border-collapse: collapse;

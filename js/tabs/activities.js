@@ -1,6 +1,7 @@
 import * as utils from './utils.js';
 import { showNotification } from './gear.js';
-import { updateActivityType, deleteActivity } from '../services/index.js';
+import { updateActivityType, deleteActivity, deleteActivities, fetchActivityGpx } from '../services/index.js';
+import { buildZip } from '../shared/utils/zip.js';
 
 const RUN_TYPES = new Set(['Run', 'TrailRun', 'VirtualRun']);
 const BIKE_TYPES = new Set(['Ride', 'VirtualRide', 'GravelRide', 'MountainBikeRide', 'EBikeRide']);
@@ -80,7 +81,10 @@ function buildActivitiesCsv(activities, columns, cellValueGetter) {
 }
 
 function downloadTextFile(content, filename, mimeType = 'text/plain') {
-    const blob = new Blob([content], { type: mimeType });
+    downloadBlob(new Blob([content], { type: mimeType }), filename);
+}
+
+function downloadBlob(blob, filename) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -89,6 +93,44 @@ function downloadTextFile(content, filename, mimeType = 'text/plain') {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+}
+
+function timestampForFilename(now = new Date()) {
+    const pad = n => String(n).padStart(2, '0');
+    return `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}`;
+}
+
+// "2024-05-12_Morning_Run.gpx" — date first so the files sort chronologically in a folder.
+function gpxFilename(activity) {
+    const date = (activity.start_date_local || '').slice(0, 10);
+    const name = String(activity.name || 'activity').replace(/[^\p{L}\p{N}]+/gu, '_').replace(/^_+|_+$/g, '').slice(0, 60);
+    return `${[date, name].filter(Boolean).join('_') || 'activity'}.gpx`;
+}
+
+// Fetches in small batches: a few dozen simultaneous requests is pointless for local files.
+async function fetchGpxFiles(activities, batchSize = 6) {
+    const files = [];
+    const failed = [];
+    for (let i = 0; i < activities.length; i += batchSize) {
+        const batch = activities.slice(i, i + batchSize);
+        const results = await Promise.allSettled(batch.map(a => fetchActivityGpx(a.id)));
+        results.forEach((result, j) => {
+            if (result.status === 'fulfilled') files.push({ activity: batch[j], content: result.value });
+            else failed.push(batch[j]);
+        });
+    }
+    return { files, failed };
+}
+
+// ZIP entries need unique names; two activities can share a date and a name.
+function uniqueNames(files) {
+    const used = new Map();
+    return files.map(({ activity, content }) => {
+        const base = gpxFilename(activity);
+        const n = (used.get(base) || 0) + 1;
+        used.set(base, n);
+        return { name: n === 1 ? base : base.replace(/\.gpx$/, `_${n}.gpx`), content };
+    });
 }
 
 const GROUP_BY_OPTIONS = ['none', 'day', 'week', 'month', 'year'];
@@ -580,6 +622,9 @@ export function renderActivitiesTab(allActivities) {
             sortCol: 'start_date_local',
             sortDir: 'desc',
             visibleActivities: [],
+            selectedIds: new Set(),
+            lastSelectedIndex: null,
+            bulkBusy: false,
             selectedCols: COLUMNS.filter(c => !c.defaultHidden).map(c => c.key),
             groupBy: 'none',
             metricMode: 'auto',
@@ -758,7 +803,7 @@ export function renderActivitiesTab(allActivities) {
             f.powerMax = document.getElementById('flt-power-max').value;
             f.tssMin = document.getElementById('flt-tss-min').value;
             f.tssMax = document.getElementById('flt-tss-max').value;
-            render();
+            tableEl._actRender();
         }
 
         IDS.forEach(id => {
@@ -786,7 +831,7 @@ export function renderActivitiesTab(allActivities) {
             state.groupBy = 'none';
             state.metricMode = 'auto';
             state.textMode = 'frequent';
-            render();
+            tableEl._actRender();
         });
 
         function ensureValidSelection() {
@@ -835,7 +880,7 @@ export function renderActivitiesTab(allActivities) {
                     state.sortDir = 'desc';
                 }
                 renderColumnEditor();
-                render();
+                tableEl._actRender();
             });
         }
 
@@ -896,6 +941,14 @@ export function renderActivitiesTab(allActivities) {
         const grouped = state.groupBy !== 'none';
         const sorted = applySort(groupedRows, grouped);
         state.visibleActivities = sorted;
+
+        // Selection only ever covers rows currently on screen: filtering a selected activity
+        // away (or deleting it, or grouping the table) drops it, so a bulk action can never
+        // touch something the user can't see.
+        const visibleIds = grouped ? [] : sorted.map(a => String(a.id));
+        const visibleIdSet = new Set(visibleIds);
+        state.selectedIds.forEach(id => { if (!visibleIdSet.has(id)) state.selectedIds.delete(id); });
+
         const selectedCols = new Set(state.selectedCols && state.selectedCols.length ? state.selectedCols : COLUMNS.map(c => c.key));
         const visibleColumns = allColumns.filter(c => selectedCols.has(c.key));
         if (visibleColumns.length === 0) visibleColumns.push(COLUMNS[0]);
@@ -904,7 +957,9 @@ export function renderActivitiesTab(allActivities) {
         }
         const { sortCol, sortDir } = state;
 
+        const selectHeader = grouped ? '' : `<th class="act-select-cell"><input type="checkbox" class="act-select-all" title="Select all shown activities" aria-label="Select all shown activities"></th>`;
         const theadHtml = `<thead><tr>
+            ${selectHeader}
             ${visibleColumns.map(c => {
             const active = sortCol === c.key;
             const arrow = active ? (sortDir === 'desc' ? ' ▼' : ' ▲') : '';
@@ -912,11 +967,12 @@ export function renderActivitiesTab(allActivities) {
         }).join('')}
         </tr></thead>`;
 
-        const emptyRow = `<tr><td colspan="${visibleColumns.length}" class="act-empty">
+        const emptyRow = `<tr><td colspan="${visibleColumns.length + (grouped ? 0 : 1)}" class="act-empty">
             ${grouped ? 'No grouped periods match the current filters' : 'No activities match the current filters'}</td></tr>`;
 
         const tbodyHtml = `<tbody>${sorted.length === 0 ? emptyRow : sorted.map(act => `
             <tr>
+                ${grouped ? '' : `<td class="act-select-cell"><input type="checkbox" class="act-select" data-activity-id="${escapeHtml(act.id)}" aria-label="Select activity"></td>`}
                 ${visibleColumns.map(col => `<td>${groupedCellValue(act, col, state.metricMode, state.textMode)}</td>`).join('')}
             </tr>`).join('')}
         </tbody>`;
@@ -935,11 +991,18 @@ export function renderActivitiesTab(allActivities) {
 
         // Row counter
         if (counterEl) {
+            const bulkHtml = grouped ? '' : `
+                    <span id="act-selected-count" class="act-selected-count"></span>
+                    <button id="act-bulk-gpx" class="act-export-btn" type="button" title="Download the original GPX of the selected activities">Download GPX</button>
+                    <button id="act-bulk-delete" class="act-bulk-delete-btn" type="button" title="Delete the selected activities permanently">🗑 Delete</button>`;
             counterEl.innerHTML = `
                 <span>${grouped
                     ? `${sorted.length} groups / ${filtered.length} activities`
                     : `${sorted.length} / ${allActivities.length} activities`}</span>
-                <button id="act-export-csv" class="act-export-btn" type="button">Download CSV</button>
+                <div class="act-counter-actions">
+                    ${bulkHtml}
+                    <button id="act-export-csv" class="act-export-btn" type="button">Download CSV</button>
+                </div>
             `;
 
             const exportBtn = document.getElementById('act-export-csv');
@@ -953,13 +1016,129 @@ export function renderActivitiesTab(allActivities) {
                                 ? col.csv(row[col.key], row)
                                 : groupedCellText(row, col, state.metricMode, state.textMode));
                     });
-                    const now = new Date();
-                    const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
-                    downloadTextFile(csv, `activities_filtered_${stamp}.csv`, 'text/csv;charset=utf-8;');
+                    downloadTextFile(csv, `activities_filtered_${timestampForFilename()}.csv`, 'text/csv;charset=utf-8;');
                 });
             }
         }
+
+        // ── Multi-select + bulk actions ──
+        const selectAllEl = tableEl.querySelector('.act-select-all');
+        const countEl = document.getElementById('act-selected-count');
+        const gpxBtn = document.getElementById('act-bulk-gpx');
+        const deleteBtn = document.getElementById('act-bulk-delete');
+
+        function updateSelectionUi() {
+            const count = state.selectedIds.size;
+            tableEl.querySelectorAll('.act-select').forEach(cb => {
+                const on = state.selectedIds.has(cb.dataset.activityId);
+                cb.checked = on;
+                cb.closest('tr')?.classList.toggle('act-row-selected', on);
+            });
+            if (selectAllEl) {
+                selectAllEl.checked = count > 0 && count === visibleIds.length;
+                selectAllEl.indeterminate = count > 0 && count < visibleIds.length;
+            }
+            if (countEl) countEl.textContent = count > 0 ? `${count} selected` : '';
+            if (gpxBtn) {
+                gpxBtn.disabled = count === 0 || state.bulkBusy;
+                gpxBtn.textContent = count > 0 ? `Download GPX (${count})` : 'Download GPX';
+            }
+            if (deleteBtn) {
+                deleteBtn.disabled = count === 0 || state.bulkBusy;
+                deleteBtn.textContent = count > 0 ? `🗑 Delete (${count})` : '🗑 Delete';
+            }
+        }
+
+        if (selectAllEl) {
+            selectAllEl.addEventListener('change', () => {
+                state.selectedIds.clear();
+                if (selectAllEl.checked) visibleIds.forEach(id => state.selectedIds.add(id));
+                state.lastSelectedIndex = null;
+                updateSelectionUi();
+            });
+        }
+
+        tableEl.querySelectorAll('.act-select').forEach(cb => {
+            // 'click' rather than 'change' so shiftKey is available for range selection.
+            cb.addEventListener('click', (e) => {
+                const index = visibleIds.indexOf(cb.dataset.activityId);
+                const from = e.shiftKey && state.lastSelectedIndex !== null ? state.lastSelectedIndex : index;
+                const [lo, hi] = from < index ? [from, index] : [index, from];
+                for (let i = lo; i <= hi; i++) {
+                    if (cb.checked) state.selectedIds.add(visibleIds[i]);
+                    else state.selectedIds.delete(visibleIds[i]);
+                }
+                state.lastSelectedIndex = index;
+                updateSelectionUi();
+            });
+        });
+
+        function selectedActivities() {
+            return sorted.filter(a => state.selectedIds.has(String(a.id)));
+        }
+
+        async function runBulk(action) {
+            state.bulkBusy = true;
+            updateSelectionUi();
+            try {
+                await action();
+            } finally {
+                state.bulkBusy = false;
+                updateSelectionUi();
+            }
+        }
+
+        if (gpxBtn) {
+            gpxBtn.addEventListener('click', () => runBulk(async () => {
+                const activities = selectedActivities();
+                if (activities.length === 0) return;
+
+                gpxBtn.textContent = 'Preparing…';
+                const { files, failed } = await fetchGpxFiles(activities);
+                if (files.length === 0) {
+                    showNotification('Could not download the GPX files', 'error');
+                    return;
+                }
+
+                if (files.length === 1) {
+                    downloadTextFile(files[0].content, gpxFilename(files[0].activity), 'application/gpx+xml');
+                } else {
+                    downloadBlob(buildZip(uniqueNames(files)), `activities_gpx_${timestampForFilename()}.zip`);
+                }
+
+                showNotification(failed.length
+                    ? `Downloaded ${files.length} GPX — ${failed.length} could not be read`
+                    : `Downloaded ${files.length} GPX file${files.length === 1 ? '' : 's'}`,
+                failed.length ? 'error' : 'success');
+            }));
+        }
+
+        if (deleteBtn) {
+            deleteBtn.addEventListener('click', () => runBulk(async () => {
+                const ids = selectedActivities().map(a => String(a.id));
+                if (ids.length === 0) return;
+
+                const what = ids.length === 1 ? 'this activity' : `these ${ids.length} activities`;
+                if (!confirm(`Delete ${what} permanently? The GPX ${ids.length === 1 ? 'file' : 'files'} and all data will be removed. This cannot be undone.`)) return;
+
+                try {
+                    const { deleted, notFound } = await deleteActivities(ids);
+                    state.selectedIds.clear();
+                    showNotification(notFound.length
+                        ? `Deleted ${deleted.length} activities (${notFound.length} were already gone) — refreshing...`
+                        : `Deleted ${deleted.length} ${deleted.length === 1 ? 'activity' : 'activities'} — refreshing...`, 'success');
+                    document.dispatchEvent(new CustomEvent('activities-changed'));
+                } catch (error) {
+                    showNotification(`Could not delete activities: ${error.message}`, 'error');
+                }
+            }));
+        }
+
+        updateSelectionUi();
     }
 
+    // The filter controls above are built once and outlive this call, so they must reach the
+    // latest render (which closes over the latest allActivities), not the first one.
+    tableEl._actRender = render;
     render();
 }

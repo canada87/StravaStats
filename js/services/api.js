@@ -98,6 +98,31 @@ export async function deleteActivity(activityId) {
     return handleResponse(response);
 }
 
+// Bulk delete in one request. Resolves to { deleted: [ids], notFound: [ids] }.
+export async function deleteActivities(activityIds) {
+    let response;
+    try {
+        response = await fetch('/api/local-activities', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids: activityIds }),
+        });
+    } finally {
+        await invalidateActivityCache();
+    }
+    return handleResponse(response);
+}
+
+// The original imported GPX file, as text.
+export async function fetchActivityGpx(activityId) {
+    const response = await fetch(`/api/local-activity?id=${encodeURIComponent(activityId)}&format=gpx`);
+    if (!response.ok) {
+        // handleResponse only throws on !ok; reuse it for the error message extraction.
+        await handleResponse(response);
+    }
+    return response.text();
+}
+
 export async function createGear(gearData) {
     const response = await fetch('/api/local-gear', {
         method: 'POST',

@@ -119,13 +119,37 @@ export async function readActivityStreams(id) {
     return readJsonFile(path.join(activityDir(id), 'streams.json'), null);
 }
 
-export async function deleteActivity(id) {
+// The GPX exactly as it was imported — not regenerated from streams, so nothing is lost.
+// Only ids present in the index are served, which also keeps `id` from escaping DATA_DIR.
+export async function readActivityRawGpx(id) {
     const index = await readIndex();
-    if (!index.some(a => a.id === id)) return false;
+    if (!index.some(a => a.id === id)) return null;
 
-    await rm(activityDir(id), { recursive: true, force: true });
-    await writeIndex(index.filter(a => a.id !== id));
-    return true;
+    const gpxPath = path.join(activityDir(id), 'raw.gpx');
+    if (!existsSync(gpxPath)) return null;
+    return readFile(gpxPath, 'utf8');
+}
+
+export async function deleteActivity(id) {
+    const { deleted } = await deleteActivities([id]);
+    return deleted.length > 0;
+}
+
+// Bulk variant: reads/writes the index once instead of once per activity. Ids that aren't in
+// the index are reported back as `notFound` rather than failing the whole batch.
+export async function deleteActivities(ids) {
+    const index = await readIndex();
+    const known = new Set(index.map(a => a.id));
+    const wanted = new Set(ids);
+    const deleted = [...wanted].filter(id => known.has(id));
+    const notFound = [...wanted].filter(id => !known.has(id));
+
+    if (deleted.length > 0) {
+        await Promise.all(deleted.map(id => rm(activityDir(id), { recursive: true, force: true })));
+        await writeIndex(index.filter(a => !wanted.has(a.id)));
+    }
+
+    return { deleted, notFound };
 }
 
 export async function updateActivitySummary(id, patch) {

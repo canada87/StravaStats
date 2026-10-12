@@ -2,7 +2,7 @@
 // Used directly (by URL) from js/pages/{activity,run,bike}/*.js and
 // js/pages/activity/advanced-analysis.js — see LOCAL_GPX_MIGRATION_PLAN.md §6.
 
-import { readActivitySummary, readGear, updateActivitySummary, deleteActivity } from './_local/store.js';
+import { readActivitySummary, readActivityRawGpx, readGear, updateActivitySummary, deleteActivity } from './_local/store.js';
 
 export default async function handler(req, res) {
     if (req.method === 'DELETE') {
@@ -48,9 +48,23 @@ export default async function handler(req, res) {
         return res.status(405).json({ error: 'Method Not Allowed' });
     }
 
-    const { id } = req.query;
+    const { id, format } = req.query;
     if (!id) {
         return res.status(400).json({ error: 'Activity id is required' });
+    }
+
+    if (format === 'gpx') {
+        try {
+            const gpx = await readActivityRawGpx(id);
+            if (gpx === null) {
+                return res.status(404).json({ error: 'GPX file not found' });
+            }
+            res.setHeader('Content-Type', 'application/gpx+xml; charset=utf-8');
+            return res.status(200).send(gpx);
+        } catch (error) {
+            console.error('Error in GET /api/local-activity?format=gpx:', error);
+            return res.status(500).json({ error: error.message });
+        }
     }
 
     try {

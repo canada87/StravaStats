@@ -140,6 +140,13 @@ export async function fetchActivityGpx(activityId) {
     return response.text();
 }
 
+// Per-sample streams (time offsets in seconds, heartrate, ...) of one activity.
+export async function fetchActivityStreams(activityId) {
+    const response = await fetch(`/api/local-streams?id=${encodeURIComponent(activityId)}`);
+    const result = await handleResponse(response);
+    return result.streams;
+}
+
 export async function createGear(gearData) {
     const response = await fetch('/api/local-gear', {
         method: 'POST',

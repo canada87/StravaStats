@@ -5,7 +5,7 @@
 // session, which no file contains and is therefore typed in here and stored by the server
 // (see PUT /api/local-activity, `gear_hardness`).
 import * as utils from './utils.js';
-import { updateActivityGearHardness } from '../services/index.js';
+import { updateActivityGearHardness, fetchActivityStreams } from '../services/index.js';
 
 const STATIC_BIKE_TYPE = 'StaticBike';
 
@@ -13,6 +13,11 @@ const STATIC_BIKE_TYPE = 'StaticBike';
 // stopped). They still count as sessions, but a 15-second "workout" says nothing about time or
 // heart rate, so it is kept out of those stats.
 const MIN_USABLE_SECONDS = 60;
+
+// Two consecutive HR samples further apart than this are not treated as one continuous stretch
+// (the device dropped out), so the hole is not credited to a heart-rate zone.
+const MAX_SAMPLE_GAP_SECONDS = 120;
+const STREAM_FETCH_CONCURRENCY = 4;
 
 const COLOR_TIME = 'rgba(21, 101, 192, 0.75)';
 const COLOR_HR = '#e53935';
@@ -22,6 +27,8 @@ const ZONE_COLORS = ['#90caf9', '#66bb6a', '#fdd835', '#fb8c00', '#e53935'];
 
 let charts = {};
 let state = { sessions: [] };
+let zoneRenderToken = 0; // lets a newer render discard the zone chart of an older, slower one
+const streamsCache = new Map(); // activity id -> Promise<{ time, heartrate }>
 
 /** True for the activities this tab analyses. */
 export function isStaticBikeActivity(activity) {
@@ -134,6 +141,7 @@ function sessionDateLabel(a) {
 }
 
 function destroyCharts() {
+    zoneRenderToken += 1;
     Object.values(charts).forEach(chart => chart.destroy());
     charts = {};
 }
@@ -345,20 +353,79 @@ function renderDurationHistogram(sessions) {
     });
 }
 
-// Time per HR zone, assigning each whole session to the zone of its average HR (the file only
-// has a handful of HR samples per session, so a finer split would be false precision).
-function renderZoneChart(sessions) {
+function zoneIndex(zones, hr) {
+    const index = zones.findIndex(z => hr >= z.min && (z.max === -1 || hr < z.max));
+    return index === -1 ? 0 : index;
+}
+
+// Only the two arrays the zone chart needs are kept, not the whole streams payload.
+function loadHeartRateSamples(activityId) {
+    if (!streamsCache.has(activityId)) {
+        const request = fetchActivityStreams(activityId)
+            .then(streams => ({ time: streams.time.data, heartrate: streams.heartrate?.data ?? [] }))
+            .catch(error => {
+                streamsCache.delete(activityId); // don't cache a failure
+                throw error;
+            });
+        streamsCache.set(activityId, request);
+    }
+    return streamsCache.get(activityId);
+}
+
+// Seconds spent in each zone: every interval between two consecutive HR samples goes to the
+// zone of the mean of the two.
+function secondsPerZone({ time, heartrate }, zones) {
+    const seconds = new Array(zones.length).fill(0);
+    for (let i = 1; i < heartrate.length; i++) {
+        if (!Number.isFinite(heartrate[i]) || !Number.isFinite(heartrate[i - 1])) continue;
+        const dt = time[i] - time[i - 1];
+        if (!(dt > 0) || dt > MAX_SAMPLE_GAP_SECONDS) continue;
+        seconds[zoneIndex(zones, (heartrate[i] + heartrate[i - 1]) / 2)] += dt;
+    }
+    return seconds;
+}
+
+async function mapWithConcurrency(items, limit, fn) {
+    const results = new Array(items.length);
+    let next = 0;
+    const worker = async () => {
+        while (next < items.length) {
+            const index = next++;
+            results[index] = await fn(items[index]);
+        }
+    };
+    await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+    return results;
+}
+
+// Time per HR zone, from the HR samples of each session (fetched on demand and cached). A
+// session whose samples can't be loaded or are too few falls back to being assigned, as a
+// whole, to the zone of its average HR, and the subtitle says how many were estimated that way.
+async function renderZoneChart(sessions) {
     const canvasId = 'static-bike-zone-chart';
+    const token = ++zoneRenderToken;
     const withHr = sessions.filter(hasHr);
     if (!setChartAvailable(canvasId, withHr.length > 0, 'No session has heart-rate data yet.')) return;
 
     const { zones, source } = utils.getHeartRateZones();
+    const perSession = await mapWithConcurrency(withHr, STREAM_FETCH_CONCURRENCY, async a => {
+        try {
+            const seconds = secondsPerZone(await loadHeartRateSamples(a.id), zones);
+            if (seconds.some(s => s > 0)) return { seconds, estimated: false };
+        } catch (error) {
+            console.warn(`Could not load heart-rate samples for ${a.id}:`, error);
+        }
+        const seconds = new Array(zones.length).fill(0);
+        seconds[zoneIndex(zones, a.average_heartrate)] = duration(a);
+        return { seconds, estimated: true };
+    });
+    if (token !== zoneRenderToken) return; // a newer render started while the samples were loading
+
     const minutes = new Array(zones.length).fill(0);
-    for (const a of withHr) {
-        let zone = zones.findIndex(z => a.average_heartrate >= z.min && (z.max === -1 || a.average_heartrate < z.max));
-        if (zone === -1) zone = 0;
-        minutes[zone] += duration(a) / 60;
-    }
+    for (const { seconds } of perSession) seconds.forEach((s, i) => { minutes[i] += s / 60; });
+    const estimated = perSession.filter(r => r.estimated).length;
+    const subtitle = `From HR samples · ${source}`
+        + (estimated ? ` · ${estimated} session${estimated === 1 ? '' : 's'} estimated from average HR` : '');
 
     createChart(canvasId, {
         type: 'bar',
@@ -373,7 +440,7 @@ function renderZoneChart(sessions) {
         options: {
             plugins: {
                 legend: { display: false },
-                subtitle: { display: true, text: `By session average HR · ${source}` },
+                subtitle: { display: true, text: subtitle },
             },
             scales: { y: { beginAtZero: true, title: { display: true, text: 'Minutes' } } },
         },

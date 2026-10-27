@@ -4,7 +4,7 @@
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { parseGpx } from './gpxParser.js';
-import { enrichPoints, summarizeStreams, summarizeForSport, STATIC_BIKE_TYPE } from './enrich.js';
+import { enrichPoints, summarizeStreams, summarizeForSport, maxDisplacementMeters, STATIC_BIKE_TYPE } from './enrich.js';
 import { encodePolyline } from './polyline.js';
 import { readIndex, writeIndex, saveActivity, readGear } from './store.js';
 
@@ -29,6 +29,10 @@ const GENERIC_NAME_PATTERN = /^(run|ride|cycling|walk|hike|activity|workout)$/i;
 // ("Withings activity 2026-10-02 21:26") and the file name ("activity_02102026_2126.gpx").
 const STATIC_BIKE_NAME_PATTERN = /^withings activity\b/i;
 const STATIC_BIKE_FILE_PATTERN = /^activity_\d{8}_\d{4}\./i;
+// Withings uses the same "Withings activity" name for outdoor activities too (runs, walks), and
+// those do carry GPS and heart rate. A static-bike session never leaves the spot, so the name
+// only counts when the track stays within this distance of its start.
+const STATIC_BIKE_MAX_DISPLACEMENT_M = 200;
 
 const MONTHS_IT = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic'];
 
@@ -52,14 +56,14 @@ function toLocalIsoString(utcDate) {
     return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:${p.second}`;
 }
 
-function classifySportType(gpxType, gpxName, filename) {
+function classifySportType(gpxType, gpxName, filename, isStationary) {
     if (gpxType) {
         const known = GPX_TYPE_TO_SPORT[String(gpxType).trim().toLowerCase()];
         if (known) return known;
     }
     // An explicit, recognised <type> always wins; the Withings heuristic only applies to files
     // that don't say what they are.
-    if (!gpxType && (STATIC_BIKE_NAME_PATTERN.test(gpxName || '') || STATIC_BIKE_FILE_PATTERN.test(path.basename(filename || '')))) {
+    if (!gpxType && isStationary && (STATIC_BIKE_NAME_PATTERN.test(gpxName || '') || STATIC_BIKE_FILE_PATTERN.test(path.basename(filename || '')))) {
         return STATIC_BIKE_TYPE;
     }
     return null;
@@ -118,14 +122,15 @@ export async function ingestGpxFile(filename, data) {
         return { status: 'duplicate', id: existing.id, name: existing.name };
     }
 
-    const sportType = classifySportType(gpxType, gpxName, filename) || classifySportTypeFallback(stats.average_speed);
+    const isStationary = maxDisplacementMeters(streams) <= STATIC_BIKE_MAX_DISPLACEMENT_M;
+    const sportType = classifySportType(gpxType, gpxName, filename, isStationary) || classifySportTypeFallback(stats.average_speed);
     const sessionStats = summarizeForSport(streams, sportType);
 
     const baseId = slugify(path.basename(filename, path.extname(filename))) || 'activity';
     let id = baseId;
     if (index.some(a => a.id === id)) id = `${baseId}-${contentHash}`;
 
-    const isGenericName = !gpxName || GENERIC_NAME_PATTERN.test(gpxName) || (sportType === STATIC_BIKE_TYPE && STATIC_BIKE_NAME_PATTERN.test(gpxName));
+    const isGenericName = !gpxName || GENERIC_NAME_PATTERN.test(gpxName) || STATIC_BIKE_NAME_PATTERN.test(gpxName);
     const finalName = isGenericName ? generateActivityName(sportType, startDate) : gpxName;
 
     const gearList = await readGear();

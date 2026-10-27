@@ -88,6 +88,20 @@ export function enrichPoints(points) {
 export const STATIC_BIKE_TYPE = 'StaticBike';
 
 /**
+ * Farthest the track ever gets from its first point. Used to tell a device sitting still
+ * (GPS jitter of tens of metres) from an outdoor activity, which is not something the total
+ * path length can do reliably: jitter accumulates over a long indoor session.
+ */
+export function maxDisplacementMeters(streams) {
+    const [first, ...rest] = streams.latlng.data;
+    let max = 0;
+    for (const [lat, lon] of rest) {
+        max = Math.max(max, haversineMeters(first[0], first[1], lat, lon));
+    }
+    return max;
+}
+
+/**
  * Static-bike sessions carry GPS from the device that is just sitting still, so distance,
  * speed, elevation and "moving time" derived from it are noise. What the file does hold is
  * time and (sparse) heart rate, so those are the only stats kept:

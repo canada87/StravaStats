@@ -88,6 +88,23 @@ export async function updateActivityType(activityId, type) {
     return result.activity;
 }
 
+// Static-bike gear hardness for a session. The device never records it, so it lives on the
+// server (summary.json); pass null to clear it. Resolves to the updated activity.
+export async function updateActivityGearHardness(activityId, gearHardness) {
+    let response;
+    try {
+        response = await fetch('/api/local-activity', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: activityId, gear_hardness: gearHardness }),
+        });
+    } finally {
+        await invalidateActivityCache();
+    }
+    const result = await handleResponse(response);
+    return result.activity;
+}
+
 export async function deleteActivity(activityId) {
     let response;
     try {

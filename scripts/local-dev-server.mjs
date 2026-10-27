@@ -221,7 +221,7 @@ function resolveStaticPath(url) {
 
   if (
     decodedPathname === '/' ||
-    decodedPathname.match(/^\/(run|dashboard|bike|trends|planner|gear|activities|calendar|weather|map|wrapped|ai-coach)$/)
+    decodedPathname.match(/^\/(run|dashboard|bike|static-bike|trends|planner|gear|activities|calendar|weather|map|wrapped|ai-coach)$/)
   ) {
     return path.join(rootDir, 'index.html');
   }

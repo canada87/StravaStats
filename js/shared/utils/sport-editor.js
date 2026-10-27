@@ -8,7 +8,7 @@ import { updateActivityType } from '../../services/index.js';
 
 // Every sport value the app already has pace/cadence-unit or emoji handling for
 // (see the RUN_TYPES/BIKE_TYPES sets in js/tabs/activities.js).
-const SPORT_TYPE_OPTIONS = ['Run', 'TrailRun', 'VirtualRun', 'Ride', 'VirtualRide', 'GravelRide', 'MountainBikeRide', 'EBikeRide', 'Hike', 'Walk'];
+const SPORT_TYPE_OPTIONS = ['Run', 'TrailRun', 'VirtualRun', 'Ride', 'VirtualRide', 'GravelRide', 'MountainBikeRide', 'EBikeRide', 'StaticBike', 'Hike', 'Walk'];
 
 function escapeHtml(value) {
     return String(value)

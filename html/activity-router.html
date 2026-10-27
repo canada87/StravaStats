@@ -50,7 +50,11 @@
                 let targetPage = 'activity.html';
 
                 // Route based on sport type
-                if (
+                if (sportType === 'StaticBike') {
+                    // No distance/elevation/speed to show: the generic page fits better than
+                    // bike.html (whose check below would otherwise match the "bike" in the name).
+                    targetPage = 'activity.html';
+                } else if (
                     sportType === 'Run' ||
                     sportType === 'TrailRun' ||
                     sportType.toLowerCase().includes('run')

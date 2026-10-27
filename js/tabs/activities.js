@@ -7,7 +7,7 @@ const RUN_TYPES = new Set(['Run', 'TrailRun', 'VirtualRun']);
 const BIKE_TYPES = new Set(['Ride', 'VirtualRide', 'GravelRide', 'MountainBikeRide', 'EBikeRide']);
 // Sport values the "Sport" column's inline editor offers — every value the app already has
 // pace/cadence-unit or emoji handling for (the two sets above, plus Hike/Walk).
-const SPORT_TYPE_OPTIONS = ['Run', 'TrailRun', 'VirtualRun', 'Ride', 'VirtualRide', 'GravelRide', 'MountainBikeRide', 'EBikeRide', 'Hike', 'Walk'];
+const SPORT_TYPE_OPTIONS = ['Run', 'TrailRun', 'VirtualRun', 'Ride', 'VirtualRide', 'GravelRide', 'MountainBikeRide', 'EBikeRide', 'StaticBike', 'Hike', 'Walk'];
 
 function sportEmoji(type) { return utils.sportEmoji(type); }
 function getType(a) { return (a.sport_type || a.type || 'Unknown').trim(); }

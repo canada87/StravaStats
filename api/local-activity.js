@@ -2,7 +2,48 @@
 // Used directly (by URL) from js/pages/{activity,run,bike}/*.js and
 // js/pages/activity/advanced-analysis.js — see LOCAL_GPX_MIGRATION_PLAN.md §6.
 
-import { readActivitySummary, readActivityRawGpx, readGear, updateActivitySummary, deleteActivity } from './_local/store.js';
+import { readActivitySummary, readActivityStreams, readActivityRawGpx, readGear, updateActivitySummary, deleteActivity } from './_local/store.js';
+import { summarizeForSport, STATIC_BIKE_TYPE } from './_local/enrich.js';
+
+// Highest value accepted for the static bike's gear hardness. The scale depends on the bike
+// (a resistance knob, a gear number...) and isn't recorded in the GPX, so this only guards
+// against typos rather than encoding a specific bike.
+const MAX_GEAR_HARDNESS = 100;
+
+// Summary fields that depend on the sport (see summarizeForSport): re-derived from the stored
+// streams whenever an activity moves into or out of StaticBike, so a mis-classified Withings
+// session gets the same numbers as one imported correctly.
+const SPORT_DEPENDENT_FIELDS = [
+    'distance', 'moving_time', 'elapsed_time', 'total_elevation_gain',
+    'average_heartrate', 'max_heartrate', 'average_speed', 'max_speed',
+];
+
+// Returns { value } on success or { error } for an invalid input. null / '' clear the value.
+function parseGearHardness(raw) {
+    if (raw === null || raw === '') return { value: null };
+    const value = Number(raw);
+    if (typeof raw === 'boolean' || !Number.isFinite(value) || value < 0 || value > MAX_GEAR_HARDNESS) {
+        return { error: `gear_hardness must be a number between 0 and ${MAX_GEAR_HARDNESS}, or null to clear it` };
+    }
+    return { value };
+}
+
+async function buildTypePatch(id, type) {
+    // type/sport_type are kept identical: the app's filtering logic reads either one
+    // depending on the tab (see LOCAL_GPX_MIGRATION_PLAN.md), so both must agree.
+    const patch = { type, sport_type: type };
+
+    const current = await readActivitySummary(id);
+    const wasStatic = (current?.sport_type || current?.type) === STATIC_BIKE_TYPE;
+    if (current && wasStatic !== (type === STATIC_BIKE_TYPE)) {
+        const streams = await readActivityStreams(id);
+        if (streams) {
+            const stats = summarizeForSport(streams, type);
+            for (const field of SPORT_DEPENDENT_FIELDS) patch[field] = stats[field];
+        }
+    }
+    return patch;
+}
 
 export default async function handler(req, res) {
     if (req.method === 'DELETE') {
@@ -25,14 +66,23 @@ export default async function handler(req, res) {
 
     if (req.method === 'PUT') {
         const { id, type } = req.body || {};
-        if (!id || !type) {
-            return res.status(400).json({ error: 'id and type are required' });
+        const hasHardness = Object.prototype.hasOwnProperty.call(req.body || {}, 'gear_hardness');
+        if (!id || (!type && !hasHardness)) {
+            return res.status(400).json({ error: 'id and at least one of type, gear_hardness are required' });
         }
 
         try {
-            // type/sport_type are kept identical: the app's filtering logic reads either one
-            // depending on the tab (see LOCAL_GPX_MIGRATION_PLAN.md), so both must agree.
-            const updated = await updateActivitySummary(id, { type, sport_type: type });
+            const patch = {};
+            if (type) Object.assign(patch, await buildTypePatch(id, type));
+            if (hasHardness) {
+                const parsed = parseGearHardness(req.body.gear_hardness);
+                if (parsed.error) {
+                    return res.status(400).json({ error: parsed.error });
+                }
+                patch.gear_hardness = parsed.value;
+            }
+
+            const updated = await updateActivitySummary(id, patch);
             if (!updated) {
                 return res.status(404).json({ error: 'Activity not found' });
             }

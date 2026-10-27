@@ -5,6 +5,8 @@ import {
     renderRunAnalysisTab,
     renderBikeAnalysisTab,
     isRideActivity,
+    renderStaticBikeTab,
+    isStaticBikeActivity,
     renderDashboardTab,
     renderTrendsTab,
     renderPlannerTab,
@@ -69,6 +71,7 @@ document.addEventListener('DOMContentLoaded', () => {
         'dashboard-tab': { render: () => renderDashboardTab(allActivities, dateFilterFrom, dateFilterTo), usesFilters: true },
         'run-tab': { render: () => renderRunAnalysisTab(allActivities, dateFilterFrom, dateFilterTo, runGearFilter), usesFilters: true },
         'bike-tab': { render: () => renderBikeAnalysisTab(allActivities, dateFilterFrom, dateFilterTo, bikeGearFilter, bikeRollingWindow), usesFilters: true },
+        'static-bike-tab': { render: () => renderStaticBikeTab(allActivities, dateFilterFrom, dateFilterTo), usesFilters: true },
         'trends-tab': { render: () => renderTrendsTab(allActivities, dateFilterFrom, dateFilterTo, trendsSportFilter, trendsDataType), usesFilters: true },
         'planner-tab': { render: () => renderPlannerTab(allActivities) },
         'gear-tab': { render: () => renderGearTab(allActivities) },
@@ -99,6 +102,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const bikeDateFromEl = document.getElementById('bike-date-from');
     const bikeDateToEl = document.getElementById('bike-date-to');
     const bikeGearFilterEl = document.getElementById('bike-gear-filter');
+
+    // Static Bike Tab
+    const staticBikeApplyFilterButton = document.getElementById('static-bike-apply-date-filter');
+    const staticBikeResetFilterButton = document.getElementById('static-bike-reset-date-filter');
+    const staticBikeDateFromEl = document.getElementById('static-bike-date-from');
+    const staticBikeDateToEl = document.getElementById('static-bike-date-to');
 
     const settingsButton = document.getElementById('settings-button');
     const settingsPanel = document.getElementById('settings-panel');
@@ -180,6 +189,7 @@ document.addEventListener('DOMContentLoaded', () => {
         '/run': 'run-tab',
         '/dashboard': 'dashboard-tab',
         '/bike': 'bike-tab',
+        '/static-bike': 'static-bike-tab',
         '/trends': 'trends-tab',
         '/planner': 'planner-tab',
         '/gear': 'gear-tab',
@@ -196,6 +206,7 @@ document.addEventListener('DOMContentLoaded', () => {
         'run-tab': '/run',
         'dashboard-tab': '/dashboard',
         'bike-tab': '/bike',
+        'static-bike-tab': '/static-bike',
         'trends-tab': '/trends',
         'planner-tab': '/planner',
         'gear-tab': '/gear',
@@ -242,6 +253,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (dateToEl) dateToEl.value = dateFilterTo || '';
         if (bikeDateFromEl) bikeDateFromEl.value = dateFilterFrom || '';
         if (bikeDateToEl) bikeDateToEl.value = dateFilterTo || '';
+        if (staticBikeDateFromEl) staticBikeDateFromEl.value = dateFilterFrom || '';
+        if (staticBikeDateToEl) staticBikeDateToEl.value = dateFilterTo || '';
         if (runGearFilterEl) runGearFilterEl.value = runGearFilter || 'all';
         if (bikeGearFilterEl) bikeGearFilterEl.value = bikeGearFilter || 'all';
     }
@@ -409,8 +422,9 @@ document.addEventListener('DOMContentLoaded', () => {
         // Setup for Run Tab
         const runContainer = document.getElementById('year-filter-buttons');
         const bikeContainer = document.getElementById('bike-year-filter-buttons');
+        const staticBikeContainer = document.getElementById('static-bike-year-filter-buttons');
 
-        if ((runContainer || bikeContainer) && allActivities.length === 0) return;
+        if ((runContainer || bikeContainer || staticBikeContainer) && allActivities.length === 0) return;
 
         // Every year in which the sport was practised (not only the latest few), newest first
         const yearButtonsFor = isSport => {
@@ -422,6 +436,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Populate both containers
         if (runContainer) runContainer.innerHTML = yearButtonsFor(a => a.type && a.type.includes('Run'));
         if (bikeContainer) bikeContainer.innerHTML = yearButtonsFor(isRideActivity);
+        if (staticBikeContainer) staticBikeContainer.innerHTML = yearButtonsFor(isStaticBikeActivity);
 
         // Setup event listeners for Run Tab
         if (runContainer) {
@@ -461,6 +476,26 @@ document.addEventListener('DOMContentLoaded', () => {
                     saveFilterState();
 
                     renderBikeAnalysisTab(allActivities, dateFilterFrom, dateFilterTo, bikeGearFilter, bikeRollingWindow);
+                });
+            });
+        }
+
+        // Setup event listeners for Static Bike Tab
+        if (staticBikeContainer) {
+            staticBikeContainer.querySelectorAll('.year-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    staticBikeContainer.querySelectorAll('.year-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+
+                    const year = btn.dataset.year;
+                    dateFilterFrom = `${year}-01-01`;
+                    dateFilterTo = `${year}-12-31`;
+
+                    if (staticBikeDateFromEl) staticBikeDateFromEl.value = dateFilterFrom;
+                    if (staticBikeDateToEl) staticBikeDateToEl.value = dateFilterTo;
+                    saveFilterState();
+
+                    renderStaticBikeTab(allActivities, dateFilterFrom, dateFilterTo);
                 });
             });
         }
@@ -810,6 +845,29 @@ document.addEventListener('DOMContentLoaded', () => {
             bikeGearFilter = bikeGearFilterEl.value || 'all';
             saveFilterState();
             renderBikeAnalysisTab(allActivities, dateFilterFrom, dateFilterTo, bikeGearFilter, bikeRollingWindow);
+        });
+    }
+
+    // Static Bike Tab Filters
+    if (staticBikeApplyFilterButton) {
+        staticBikeApplyFilterButton.addEventListener('click', () => {
+            document.querySelectorAll('#static-bike-year-filter-buttons .year-btn').forEach(b => b.classList.remove('active'));
+            dateFilterFrom = staticBikeDateFromEl?.value || null;
+            dateFilterTo = staticBikeDateToEl?.value || null;
+            saveFilterState();
+            renderStaticBikeTab(allActivities, dateFilterFrom, dateFilterTo);
+        });
+    }
+
+    if (staticBikeResetFilterButton) {
+        staticBikeResetFilterButton.addEventListener('click', () => {
+            dateFilterFrom = null;
+            dateFilterTo = null;
+            if (staticBikeDateFromEl) staticBikeDateFromEl.value = '';
+            if (staticBikeDateToEl) staticBikeDateToEl.value = '';
+            document.querySelectorAll('#static-bike-year-filter-buttons .year-btn').forEach(b => b.classList.remove('active'));
+            saveFilterState();
+            renderStaticBikeTab(allActivities, dateFilterFrom, dateFilterTo);
         });
     }
 

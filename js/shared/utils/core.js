@@ -501,6 +501,7 @@ export const SPORT_EMOJI = {
     GravelRide: '🪨',
     MountainBikeRide: '🚵',
     EBikeRide: '🚴',
+    StaticBike: '🚲',
     Walk: '🚶',
     Hike: '🥾',
     Tennis: '🎾',

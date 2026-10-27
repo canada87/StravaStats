@@ -85,6 +85,63 @@ export function enrichPoints(points) {
     return streams;
 }
 
+export const STATIC_BIKE_TYPE = 'StaticBike';
+
+/**
+ * Static-bike sessions carry GPS from the device that is just sitting still, so distance,
+ * speed, elevation and "moving time" derived from it are noise. What the file does hold is
+ * time and (sparse) heart rate, so those are the only stats kept:
+ * - duration is first-to-last timestamp, and doubles as moving_time (the stationary GPS would
+ *   otherwise always give 0);
+ * - average HR is time-weighted (trapezoid between consecutive HR samples), because samples
+ *   are minutes apart and irregular — a plain mean over-weights bursts of close samples.
+ */
+function staticBikeStats(streams) {
+    const times = streams.time.data;
+    const hr = streams.heartrate?.data ?? [];
+    const elapsed = times.length ? Math.max(0, times[times.length - 1] - times[0]) : 0;
+
+    let weightedSum = 0;
+    let coveredTime = 0;
+    let prev = null;
+    const samples = [];
+    for (let i = 0; i < hr.length; i++) {
+        if (!Number.isFinite(hr[i])) continue;
+        samples.push(hr[i]);
+        if (prev && times[i] > prev.t) {
+            const dt = times[i] - prev.t;
+            weightedSum += ((prev.hr + hr[i]) / 2) * dt;
+            coveredTime += dt;
+        }
+        prev = { t: times[i], hr: hr[i] };
+    }
+
+    let averageHr = null;
+    if (coveredTime > 0) averageHr = weightedSum / coveredTime;
+    else if (samples.length) averageHr = samples.reduce((a, b) => a + b, 0) / samples.length;
+
+    return {
+        distance: 0,
+        total_elevation_gain: 0,
+        average_speed: 0,
+        max_speed: 0,
+        moving_time: Math.round(elapsed),
+        elapsed_time: Math.round(elapsed),
+        average_heartrate: averageHr === null ? null : Math.round(averageHr * 10) / 10,
+        max_heartrate: samples.length ? Math.max(...samples) : null,
+    };
+}
+
+/**
+ * Sport-aware version of summarizeStreams(): the single entry point for computing summary
+ * stats, so a session gets the same numbers whether it is classified at import time or
+ * re-classified later from the UI.
+ */
+export function summarizeForSport(streams, sportType) {
+    const stats = summarizeStreams(streams);
+    return sportType === STATIC_BIKE_TYPE ? { ...stats, ...staticBikeStats(streams) } : stats;
+}
+
 /**
  * Aggregates streams into the summary fields Strava normally returns for an activity list item
  * (distance, moving_time, average_heartrate, ...). See core.js in js/shared/preprocessing for

@@ -4,7 +4,7 @@
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { parseGpx } from './gpxParser.js';
-import { enrichPoints, summarizeStreams } from './enrich.js';
+import { enrichPoints, summarizeStreams, summarizeForSport, STATIC_BIKE_TYPE } from './enrich.js';
 import { encodePolyline } from './polyline.js';
 import { readIndex, writeIndex, saveActivity, readGear } from './store.js';
 
@@ -23,6 +23,12 @@ const GPX_TYPE_TO_SPORT = {
 };
 
 const GENERIC_NAME_PATTERN = /^(run|ride|cycling|walk|hike|activity|workout)$/i;
+
+// Withings devices export indoor/static-bike sessions as GPX with no <type> at all (the GPS
+// "track" is just the device sitting still): the only tell is the track name
+// ("Withings activity 2026-10-02 21:26") and the file name ("activity_02102026_2126.gpx").
+const STATIC_BIKE_NAME_PATTERN = /^withings activity\b/i;
+const STATIC_BIKE_FILE_PATTERN = /^activity_\d{8}_\d{4}\./i;
 
 const MONTHS_IT = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic'];
 
@@ -46,9 +52,17 @@ function toLocalIsoString(utcDate) {
     return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:${p.second}`;
 }
 
-function classifySportType(gpxType) {
-    if (!gpxType) return null;
-    return GPX_TYPE_TO_SPORT[String(gpxType).trim().toLowerCase()] || null;
+function classifySportType(gpxType, gpxName, filename) {
+    if (gpxType) {
+        const known = GPX_TYPE_TO_SPORT[String(gpxType).trim().toLowerCase()];
+        if (known) return known;
+    }
+    // An explicit, recognised <type> always wins; the Withings heuristic only applies to files
+    // that don't say what they are.
+    if (!gpxType && (STATIC_BIKE_NAME_PATTERN.test(gpxName || '') || STATIC_BIKE_FILE_PATTERN.test(path.basename(filename || '')))) {
+        return STATIC_BIKE_TYPE;
+    }
+    return null;
 }
 
 // Only validated against running GPX files so far (see LOCAL_GPX_MIGRATION_PLAN.md §12) — the
@@ -60,7 +74,7 @@ function classifySportTypeFallback(averageSpeedMs) {
 }
 
 function generateActivityName(sportType, localDate) {
-    const labels = { Run: 'Corsa', TrailRun: 'Corsa in sentiero', Ride: 'Uscita in bici', MountainBikeRide: 'Uscita in MTB', Hike: 'Escursione', Walk: 'Camminata' };
+    const labels = { Run: 'Corsa', TrailRun: 'Corsa in sentiero', Ride: 'Uscita in bici', StaticBike: 'Bici statica', MountainBikeRide: 'Uscita in MTB', Hike: 'Escursione', Walk: 'Camminata' };
     const label = labels[sportType] || 'Attività';
     const p = toLocalParts(localDate);
     return `${label} - ${p.day} ${MONTHS_IT[Number(p.month) - 1]} ${p.year}, ${p.hour}:${p.minute}`;
@@ -104,13 +118,14 @@ export async function ingestGpxFile(filename, data) {
         return { status: 'duplicate', id: existing.id, name: existing.name };
     }
 
-    const sportType = classifySportType(gpxType) || classifySportTypeFallback(stats.average_speed);
+    const sportType = classifySportType(gpxType, gpxName, filename) || classifySportTypeFallback(stats.average_speed);
+    const sessionStats = summarizeForSport(streams, sportType);
 
     const baseId = slugify(path.basename(filename, path.extname(filename))) || 'activity';
     let id = baseId;
     if (index.some(a => a.id === id)) id = `${baseId}-${contentHash}`;
 
-    const isGenericName = !gpxName || GENERIC_NAME_PATTERN.test(gpxName);
+    const isGenericName = !gpxName || GENERIC_NAME_PATTERN.test(gpxName) || (sportType === STATIC_BIKE_TYPE && STATIC_BIKE_NAME_PATTERN.test(gpxName));
     const finalName = isGenericName ? generateActivityName(sportType, startDate) : gpxName;
 
     const gearList = await readGear();
@@ -130,14 +145,14 @@ export async function ingestGpxFile(filename, data) {
         start_date: startDateIso,
         start_date_local: toLocalIsoString(startDate),
         start_latlng: stats.start_latlng,
-        distance: stats.distance,
-        moving_time: stats.moving_time,
-        elapsed_time: stats.elapsed_time,
-        total_elevation_gain: stats.total_elevation_gain,
-        average_heartrate: stats.average_heartrate,
-        max_heartrate: stats.max_heartrate,
-        average_speed: stats.average_speed,
-        max_speed: stats.max_speed,
+        distance: sessionStats.distance,
+        moving_time: sessionStats.moving_time,
+        elapsed_time: sessionStats.elapsed_time,
+        total_elevation_gain: sessionStats.total_elevation_gain,
+        average_heartrate: sessionStats.average_heartrate,
+        max_heartrate: sessionStats.max_heartrate,
+        average_speed: sessionStats.average_speed,
+        max_speed: sessionStats.max_speed,
         gear_id: gearId,
         kudos_count: 0,
         achievement_count: 0,
@@ -150,6 +165,9 @@ export async function ingestGpxFile(filename, data) {
         map: { summary_polyline: summaryPolyline },
         source_file: filename,
     };
+
+    // Set by hand from the UI (PUT /api/local-activity): the device never records it.
+    if (sportType === STATIC_BIKE_TYPE) summary.gear_hardness = null;
 
     await saveActivity(id, { rawGpx: xmlText, summary, streams });
     await writeIndex([...index, summary]);

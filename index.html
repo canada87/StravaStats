@@ -57,6 +57,7 @@
     <!-- Tab-specific & Feature Styles -->
     <link rel="stylesheet" href="./styles/run.css">
     <link rel="stylesheet" href="./styles/bike.css">
+    <link rel="stylesheet" href="./styles/static-bike.css">
     <link rel="stylesheet" href="./styles/dashboard.css">
     <link rel="stylesheet" href="./styles/calendar.css">
     <link rel="stylesheet" href="./styles/activities.css">
@@ -109,6 +110,8 @@
                         aria-controls="dashboard-tab">Dashboard</button>
                     <button class="tab-link" data-tab="run-tab" aria-controls="run-tab">Run</button>
                     <button class="tab-link" data-tab="bike-tab" aria-controls="bike-tab">Bike</button>
+                    <button class="tab-link" data-tab="static-bike-tab" aria-controls="static-bike-tab">Static
+                        Bike</button>
                     <button class="tab-link" data-tab="trends-tab" aria-controls="trends-tab">Trends</button>
                     <button class="tab-link" data-tab="planner-tab" aria-controls="planner-tab">Predictions</button>
                     <button class="tab-link" data-tab="gear-tab" aria-controls="gear-tab">Gear</button>
@@ -392,6 +395,71 @@
 
                 </div>
 
+
+                <div id="static-bike-tab" class="tab-content">
+
+                    <div id="static-bike-date-controls" class="date-controls-container">
+                        <div class="filter-group">
+                            <label>From: <input type="date" id="static-bike-date-from"></label>
+                            <label>To: <input type="date" id="static-bike-date-to"></label>
+                            <button id="static-bike-apply-date-filter">Apply</button>
+                            <button id="static-bike-reset-date-filter">Reset</button>
+                        </div>
+                        <div id="static-bike-year-filter-buttons" class="filter-group year-buttons"></div>
+                    </div>
+
+                    <p id="static-bike-empty" class="static-bike-note hidden">
+                        No static bike sessions in this period. Sessions are recognised when a Withings
+                        <em>activity_&hellip;</em> GPX file is imported; you can also set an activity's sport to
+                        <em>StaticBike</em> from the Activities tab.
+                    </p>
+
+                    <div id="static-bike-content">
+                        <p id="static-bike-data-note" class="static-bike-note hidden"></p>
+
+                        <div id="static-bike-summary-cards" class="summary-grid"></div>
+
+                        <div class="charts-grid">
+                            <div class="chart-container">
+                                <h3>Weekly Time &amp; Sessions</h3>
+                                <canvas id="static-bike-weekly-chart"></canvas>
+                            </div>
+
+                            <div class="chart-container">
+                                <h3>Duration per Session</h3>
+                                <canvas id="static-bike-duration-chart"></canvas>
+                                <p id="static-bike-duration-chart-empty" class="static-bike-chart-empty hidden"></p>
+                            </div>
+
+                            <div class="chart-container">
+                                <h3>Heart Rate per Session</h3>
+                                <canvas id="static-bike-hr-chart"></canvas>
+                                <p id="static-bike-hr-chart-empty" class="static-bike-chart-empty hidden"></p>
+                            </div>
+
+                            <div class="chart-container">
+                                <h3>Duration Histogram</h3>
+                                <canvas id="static-bike-duration-histogram"></canvas>
+                                <p id="static-bike-duration-histogram-empty" class="static-bike-chart-empty hidden"></p>
+                            </div>
+
+                            <div class="chart-container">
+                                <h3>Time in HR Zones</h3>
+                                <canvas id="static-bike-zone-chart"></canvas>
+                                <p id="static-bike-zone-chart-empty" class="static-bike-chart-empty hidden"></p>
+                            </div>
+
+                            <div class="chart-container">
+                                <h3>Gear Hardness: Time &amp; Avg HR</h3>
+                                <canvas id="static-bike-hardness-chart"></canvas>
+                                <p id="static-bike-hardness-chart-empty" class="static-bike-chart-empty hidden"></p>
+                            </div>
+                        </div>
+
+                        <div id="static-bike-table"></div>
+                    </div>
+
+                </div>
 
                 <div id="dashboard-tab" class="tab-content active">
                     <div id="range-selector" class="dashboard-range-selector"

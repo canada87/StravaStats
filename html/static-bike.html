@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>StravaStats - Static Bike Session</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="../styles/style.css">
+    <link rel="stylesheet" href="../styles/activity-detail.css">
+
+    <!-- External Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- Vercel Analytics -->
+    <script defer src="/_vercel/insights/script.js"></script>
+</head>
+
+<body class="activity-page activity-static-bike-page">
+    <div class="container activity-shell">
+        <header class="activity-hero">
+            <div class="activity-hero__copy">
+                <span class="activity-hero__eyebrow">Static bike session</span>
+                <h1 id="activity-page-title">Static Bike Session</h1>
+                <p id="activity-hero-description">Time and heart rate of an indoor session.</p>
+            </div>
+            <div class="activity-hero__meta">
+                <div class="activity-hero__meta-top">
+                    <span class="activity-hero__date" id="activity-hero-date">--</span>
+                </div>
+                <div class="activity-hero__meta-grid">
+                    <span class="activity-hero__badge" id="activity-hero-type">Type</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- ======================================
+         SECTION 1: SESSION SETUP & HEART-RATE STATS
+         ====================================== -->
+        <div id="activity-details-row" class="activity-details-row activity-overview-grid">
+            <section class="activity-overview-card activity-overview-card--info">
+                <div class="activity-overview-card__label">Session</div>
+                <div id="activity-info" class="activity-details-col"></div>
+            </section>
+            <section class="activity-overview-card activity-overview-card--stats">
+                <div class="activity-overview-card__label">Time &amp; heart rate</div>
+                <div id="activity-stats" class="activity-details-col"></div>
+            </section>
+        </div>
+
+        <!-- ======================================
+         SECTION 2: HEART RATE OVER TIME
+         ====================================== -->
+        <div id="hr-time-section" class="data-section">
+            <h3>❤️ Heart Rate vs Time</h3>
+            <p id="hr-time-empty" class="hidden">This session has no heart-rate samples.</p>
+            <div class="chart-container">
+                <canvas id="hr-time-chart"></canvas>
+            </div>
+        </div>
+
+        <!-- ======================================
+         SECTION 3: TIME IN ZONES
+         ====================================== -->
+        <div id="hr-zones-section" class="data-section">
+            <h3>Time in Heart Rate Zones</h3>
+            <div class="chart-container-inner">
+                <canvas id="hr-zones-chart"></canvas>
+            </div>
+        </div>
+
+        <button onclick="window.close()">Close</button>
+        <button id="delete-activity-btn" class="btn-delete-activity">🗑 Delete activity</button>
+    </div>
+
+    <script type="module" src="../js/pages/static-bike/index.js"></script>
+</body>
+
+</html>

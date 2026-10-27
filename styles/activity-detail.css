@@ -51,6 +51,10 @@ body.activity-page .activity-shell {
     background: linear-gradient(135deg, #111827 0%, #1f2937 50%, #1d4ed8 100%);
 }
 
+.activity-static-bike-page .activity-hero {
+    background: linear-gradient(135deg, #111827 0%, #1f2937 50%, #0f766e 100%);
+}
+
 .activity-hero__copy {
     position: relative;
     z-index: 1;
@@ -696,3 +700,53 @@ body.activity-page .data-section h3 {
     cursor: wait;
 }
 
+
+/* =================================================================
+   Static bike session page (static-bike.html): gear hardness editor
+   ================================================================= */
+.gear-hardness-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.gear-hardness-form input[type="number"] {
+    width: 6rem;
+    font: inherit;
+    padding: 0.4rem 0.5rem;
+    border-radius: 8px;
+    border: 1px solid rgba(128, 128, 128, 0.5);
+    background: #fff;
+    color: #111827;
+}
+
+.gear-hardness-form button {
+    font: inherit;
+    padding: 0.4rem 0.9rem;
+    border-radius: 8px;
+    border: none;
+    background: #0f766e;
+    color: #fff;
+    cursor: pointer;
+}
+
+.gear-hardness-form button:disabled {
+    opacity: 0.6;
+    cursor: wait;
+}
+
+.gear-hardness-status.is-saved {
+    color: #15803d;
+}
+
+.gear-hardness-status.is-error {
+    color: #b91c1c;
+}
+
+.gear-hardness-hint {
+    margin: 0;
+    font-size: 0.82rem;
+    color: #64748b;
+}

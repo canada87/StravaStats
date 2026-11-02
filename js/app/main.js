@@ -691,7 +691,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const files = Array.from(fileList || []);
         if (files.length === 0) return;
 
-        showLoading(`Importing ${files.length} GPX file(s)...`, 20);
+        showLoading(`Importing ${files.length} GPX/TCX file(s)...`, 20);
         try {
             const result = await importGpxFiles(files);
             const parts = [];

@@ -8,6 +8,9 @@ const MOVING_SPEED_THRESHOLD_MS = 0.5; // m/s
 const SMOOTHING_WINDOW = 7; // samples, centered
 
 function haversineMeters(lat1, lon1, lat2, lon2) {
+    // Indoor-trainer TCX trackpoints have no <Position> at all (lat/lon are null rather than
+    // 0/0), so any segment touching one of those points simply contributes no distance.
+    if (!Number.isFinite(lat1) || !Number.isFinite(lon1) || !Number.isFinite(lat2) || !Number.isFinite(lon2)) return 0;
     const toRad = v => (v * Math.PI) / 180;
     const dLat = toRad(lat2 - lat1);
     const dLon = toRad(lon2 - lon1);
@@ -93,9 +96,11 @@ export const STATIC_BIKE_TYPE = 'StaticBike';
  * path length can do reliably: jitter accumulates over a long indoor session.
  */
 export function maxDisplacementMeters(streams) {
-    const [first, ...rest] = streams.latlng.data;
+    const valid = streams.latlng.data.filter(([lat, lon]) => Number.isFinite(lat) && Number.isFinite(lon));
+    if (valid.length === 0) return 0; // no GPS fix at all (indoor-trainer TCX) counts as stationary
+    const [first] = valid;
     let max = 0;
-    for (const [lat, lon] of rest) {
+    for (const [lat, lon] of valid) {
         max = Math.max(max, haversineMeters(first[0], first[1], lat, lon));
     }
     return max;
@@ -190,6 +195,9 @@ export function summarizeStreams(streams) {
     const averageSpeed = movingTime > 0 ? totalDistance / movingTime : 0;
     const maxSpeed = speeds.length ? Math.max(...speeds) : 0;
 
+    const firstPoint = streams.latlng.data[0];
+    const startLatlng = firstPoint && Number.isFinite(firstPoint[0]) && Number.isFinite(firstPoint[1]) ? firstPoint : null;
+
     return {
         distance: Math.round(totalDistance * 10) / 10,
         moving_time: Math.round(movingTime),
@@ -199,6 +207,6 @@ export function summarizeStreams(streams) {
         max_heartrate: maxHeartrate,
         average_speed: Math.round(averageSpeed * 1000) / 1000,
         max_speed: Math.round(maxSpeed * 1000) / 1000,
-        start_latlng: streams.latlng.data[0] ?? null,
+        start_latlng: startLatlng,
     };
 }

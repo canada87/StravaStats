@@ -1,5 +1,6 @@
 import { parseMultipart } from './_local/multipart.js';
 import { ingestGpxFile } from './_local/gpxIngest.js';
+import { ingestTcxFile } from './_local/tcxIngest.js';
 
 export default async function handler(req, res) {
     if (req.method !== 'POST') {
@@ -9,7 +10,7 @@ export default async function handler(req, res) {
 
     const contentType = req.headers['content-type'] || '';
     if (!contentType.includes('multipart/form-data')) {
-        return res.status(400).json({ error: 'Expected multipart/form-data with one or more .gpx files' });
+        return res.status(400).json({ error: 'Expected multipart/form-data with one or more .gpx/.tcx files' });
     }
 
     const bodyBuffer = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || '');
@@ -21,16 +22,18 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: `Impossibile leggere l'upload: ${error.message}` });
     }
 
-    const gpxFiles = files.filter(f => /\.gpx$/i.test(f.filename));
-    if (gpxFiles.length === 0) {
-        return res.status(400).json({ error: 'Nessun file .gpx trovato nell\'upload' });
+    const importableFiles = files.filter(f => /\.(gpx|tcx)$/i.test(f.filename));
+    if (importableFiles.length === 0) {
+        return res.status(400).json({ error: 'Nessun file .gpx o .tcx trovato nell\'upload' });
     }
 
     const result = { imported: [], duplicates: [], errors: [] };
 
-    for (const file of gpxFiles) {
+    for (const file of importableFiles) {
         try {
-            const outcome = await ingestGpxFile(file.filename, file.data);
+            const outcome = /\.tcx$/i.test(file.filename)
+                ? await ingestTcxFile(file.filename, file.data)
+                : await ingestGpxFile(file.filename, file.data);
             if (outcome.status === 'duplicate') {
                 result.duplicates.push({ file: file.filename, id: outcome.id, name: outcome.name });
             } else {

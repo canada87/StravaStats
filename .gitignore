@@ -14,3 +14,5 @@ dist/
 test_gpx/
 local-data/
 *PLAN.md
+# Claude Code local config (dev server launch, settings)
+.claude/

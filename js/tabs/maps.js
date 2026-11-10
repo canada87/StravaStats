@@ -75,7 +75,6 @@ function distancePointToSegmentMeters(pLat, pLng, aLat, aLng, bLat, bLng) {
 
 
 function makeTileLayer(key) {
-    if (key === 'carto') return L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { attribution: '&copy; Carto' });
     if (key === 'carto_light') return L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', { attribution: '&copy; Carto' });
     if (key === 'stamen') return L.tileLayer('https://stamen-tiles-{s}.a.ssl.fastly.net/toner/{z}/{x}/{y}.png', { attribution: '&copy; Stamen' });
     if (key === 'esri') return L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: 'Tiles &copy; Esri' });
@@ -130,15 +129,8 @@ export function renderMapTab(activities = [], dateFrom = null, dateTo = null) {
     if (dateFromInput) dateFromInput.value = '';
     if (dateToInput) dateToInput.value = '';
 
-    // Ensure tiles selector has Carto option and default to Carto Voyager
-    if (tilesSel) {
-        try {
-            if (!Array.from(tilesSel.options).some(o => o.value === 'carto')) {
-                tilesSel.add(new Option('Carto', 'carto'), tilesSel.options[0] || null);
-            }
-            tilesSel.value = 'carto';
-        } catch (e) { }
-    }
+    // Default base map: OpenStreetMap
+    if (tilesSel) tilesSel.value = 'osm';
 
     // Controls visibility depending on visualization mode
     function updateVizControlsVisibility() {
@@ -166,7 +158,7 @@ export function renderMapTab(activities = [], dateFrom = null, dateTo = null) {
     // Initialize leaflet map singleton
     if (!window._stravaMap) {
         window._stravaMap = L.map(mapEl, { preferCanvas: true });
-        const base = makeTileLayer(tilesSel?.value || 'carto');
+        const base = makeTileLayer(tilesSel?.value || 'osm');
         base.addTo(window._stravaMap);
         window._stravaBase = base;
         window._stravaPolylines = L.layerGroup().addTo(window._stravaMap);
@@ -209,7 +201,8 @@ export function renderMapTab(activities = [], dateFrom = null, dateTo = null) {
         });
     }
 
-    function render() {
+    // opts.fit=false keeps the current view (used by the heat sliders, which only restyle the layer)
+    function render(opts = {}) {
         clearLayers();
         const visible = filterActivities();
         const bounds = [];
@@ -226,8 +219,12 @@ export function renderMapTab(activities = [], dateFrom = null, dateTo = null) {
                 else if (a.start_latlng && a.start_latlng.length === 2) heatPoints.push([a.start_latlng[0], a.start_latlng[1], 0.5 * factor]);
             });
             if (heatPoints.length) {
-                console.log(`factor: ${factor}, rad: ${rad}, blur: ${blur}, points: ${heatPoints.length}`);
-                try { window._stravaHeat = L.heatLayer(heatPoints, { radius: rad, blur: blur, maxZoom: 12 }).addTo(window._stravaMap); } catch (e) { }
+                if (typeof L.heatLayer !== 'function') {
+                    console.error('Leaflet.heat plugin not loaded: the heat view cannot be drawn.');
+                } else {
+                    window._stravaHeat = L.heatLayer(heatPoints, { radius: rad, blur: blur, maxZoom: 12 }).addTo(window._stravaMap);
+                    heatPoints.forEach(p => bounds.push([p[0], p[1]]));
+                }
             }
         } else if (view === 'empty') {
             // empty view: show only base map (summits layer handled separately)
@@ -265,7 +262,7 @@ export function renderMapTab(activities = [], dateFrom = null, dateTo = null) {
             });
         }
 
-        if (bounds.length) {
+        if (opts.fit !== false && bounds.length) {
             try {
                 const bb = L.latLngBounds(bounds);
                 window._stravaMap.fitBounds(bb.pad(0.1));
@@ -302,9 +299,9 @@ export function renderMapTab(activities = [], dateFrom = null, dateTo = null) {
     });
     vizSel?.addEventListener('change', () => render());
     sportSel?.addEventListener('change', () => render());
-    densitySlider?.addEventListener('input', () => render());
-    radiusSlider?.addEventListener('input', () => render());
-    blurSlider?.addEventListener('input', () => render());
+    densitySlider?.addEventListener('input', () => render({ fit: false }));
+    radiusSlider?.addEventListener('input', () => render({ fit: false }));
+    blurSlider?.addEventListener('input', () => render({ fit: false }));
     colorBySportCheckbox?.addEventListener('change', () => render());
 
     // Initial render

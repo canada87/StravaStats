@@ -47,7 +47,7 @@
     <!-- Leaflet + Leaflet.heat -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
+    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
 
     <!-- CSS Framework & Components (Load in order) -->
     <link rel="stylesheet" href="./styles/colors.css">
@@ -419,6 +419,11 @@
 
                         <div id="static-bike-summary-cards" class="summary-grid"></div>
 
+                        <div class="chart-container">
+                            <h3>Consistency Grid</h3>
+                            <div id="static-bike-consistency-grid"></div>
+                        </div>
+
                         <div class="charts-grid">
                             <div class="chart-container">
                                 <h3>Weekly Time &amp; Sessions</h3>
@@ -484,36 +489,9 @@
                         <canvas id="volume-bar-chart" height="200"></canvas>
                     </div>
 
-                    <div class="chart-container readiness-chart-container">
-                        <div class="readiness-header">
-                            <div>
-                                <h3>🎯 Training Readiness</h3>
-                                <p>Composite score: freshness, fitness, fatigue & injury risk.</p>
-                            </div>
-                        </div>
-                        <div class="readiness-layout">
-                            <div class="readiness-gauge-section">
-                                <canvas id="readiness-gauge-chart" width="250" height="250"></canvas>
-                            </div>
-                            <div id="readiness-explainer" class="readiness-explainer"></div>
-                        </div>
-                        <div class="chart-container readiness-timeline-container" style="margin-top: 1.5rem;">
-                            <h4>Readiness Over Time</h4>
-                            <canvas id="readiness-timeline-chart" height="280"></canvas>
-                        </div>
-                    </div>
-
-                    <div class="chart-container acute-load-chart-container">
-                        <div class="acute-load-chart-header">
-                            <div>
-                                <h3>Training Load & Performance</h3>
-                                <p>Rolling 7-day load vs ideal range, plus form (TSB).</p>
-                            </div>
-                            <div id="acute-load-mode-switch" class="acute-load-mode-switch" role="group"
-                                aria-label="Acute load range mode" style="display:none;"></div>
-                        </div>
-                        <canvas id="acute-load-chart"></canvas>
-                        <div id="acute-load-explainer" class="acute-load-explainer"></div>
+                    <div class="chart-container">
+                        <h3>Consistency Grid</h3>
+                        <div id="dashboard-consistency-grid"></div>
                     </div>
 
                 </div>
@@ -1019,7 +997,6 @@
                             <label>Tiles:
                                 <select id="map-tiles">
                                     <option value="osm">OpenStreetMap</option>
-                                    <option value="carto">Carto Voyager</option>
                                 </select>
                             </label>
                             <label>Density:

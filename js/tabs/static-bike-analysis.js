@@ -64,7 +64,18 @@ export function renderStaticBikeTab(allActivities, dateFilterFrom, dateFilterTo)
 
     renderDataQualityNote(sessions);
     renderStats(sessions);
+    renderConsistencyGrid(sessions, dateFilterFrom, dateFilterTo);
     renderSessionsTable(sessions);
+}
+
+// Same period rules as the Run/Bike consistency grids (follows the date filter), colour
+// intensity = session duration of the day.
+function renderConsistencyGrid(sessions, dateFilterFrom, dateFilterTo) {
+    utils.renderConsistencyGrid(
+        document.getElementById('static-bike-consistency-grid'),
+        sessions,
+        { ...utils.getConsistencyGridPeriod(dateFilterFrom, dateFilterTo), categories: ['StaticBike'] }
+    );
 }
 
 // Everything that depends on the numbers (and so must refresh when a gear hardness is saved).
